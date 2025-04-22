@@ -1,0 +1,319 @@
+.auth-page {
+  display: flex;
+  min-height: calc(100vh - 130px);
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+/* Left side - form container */
+.auth-container {
+  flex: 1;
+  padding: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Right side - image */
+.auth-image {
+  flex: 1;
+  background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
+    url('https://images.unsplash.com/photo-1571902943202-507ec2618e8f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1675&q=80');
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-image.register {
+  background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
+    url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80');
+  background-size: cover;
+  background-position: center;
+}
+
+.image-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  max-width: 500px;
+  color: var(--text-light);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.image-overlay h2 {
+  font-size: 32px;
+  margin-bottom: 20px;
+  color: var(--primary);
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.image-overlay p {
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+/* Auth Header */
+.auth-header {
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.auth-header h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+  color: var(--primary);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.auth-header p {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+/* Form Styles */
+.auth-form {
+  width: 100%;
+}
+
+.form-group {
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--border-radius-circular);
+  border: 1px solid var(--border-main);
+  background-color: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.1);
+}
+
+.form-group input.error {
+  border-color: var(--error);
+}
+
+.error-message {
+  color: var(--error);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.auth-error {
+  background-color: rgba(255, 68, 58, 0.1);
+  border: 1px solid var(--error);
+  color: var(--error);
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* Password Input */
+.password-input {
+  position: relative;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-weight: 500;
+}
+
+.toggle-password:hover {
+  color: var(--primary);
+}
+
+/* Form Footer - Remember me & Forgot Password */
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+}
+
+.remember-me input[type="checkbox"] {
+  margin-right: 8px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.forgot-password {
+  color: var(--primary);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.forgot-password:hover {
+  text-decoration: underline;
+}
+
+/* Role Toggle */
+.role-toggle {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.role-button {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--border-radius-circular);
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border-main);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.role-button.active {
+  background-color: var(--primary);
+  color: var(--black);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.role-button:not(.active):hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Terms */
+.form-group.terms {
+  display: flex;
+  align-items: flex-start;
+}
+
+.form-group.terms input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-right: 12px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+}
+
+.form-group.terms label {
+  margin-bottom: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.form-group.terms a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.form-group.terms a:hover {
+  text-decoration: underline;
+}
+
+/* Auth Button */
+.auth-button {
+  width: 100%;
+  padding: 16px;
+  background-color: var(--primary);
+  color: var(--black);
+  border: none;
+  border-radius: var(--border-radius-circular);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+.auth-button:hover {
+  background-color: var(--primary-light);
+  transform: scale(1.02);
+}
+
+/* Auth Alternate */
+.auth-alternate {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.auth-alternate p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.auth-alternate a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-alternate a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Styles */
+@media (max-width: 992px) {
+  .auth-page {
+    flex-direction: column-reverse;
+  }
+  
+  .auth-image {
+    min-height: 300px;
+  }
+  
+  .auth-container {
+    padding: 40px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .auth-container {
+    padding: 30px 20px;
+  }
+  
+  .image-overlay {
+    padding: 30px 20px;
+  }
+} 
