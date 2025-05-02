@@ -6,7 +6,7 @@
 
 ## 📱 Overview
 
-GymJam is a web application that revolutionizes how music is managed in gym environments. The platform empowers gym members to participate in music selection through voting, suggesting tracks, and engaging with their fitness community. Gym owners maintain control through playlist management and Spotify integration while fostering a more interactive atmosphere.
+GymJam is a mobile application that revolutionizes how music is managed in gym environments. The platform empowers gym members to participate in music selection through voting, suggesting tracks, and engaging with their fitness community. Gym owners maintain control through playlist management and Spotify integration while fostering a more interactive atmosphere.
 
 ## 🚀 Getting Started
 
@@ -15,6 +15,10 @@ GymJam is a web application that revolutionizes how music is managed in gym envi
 - Node.js (v14.0.0 or later)
 - npm (v6.0.0 or later)
 - MongoDB (local or Atlas)
+- React Native CLI
+- Xcode (for iOS development)
+- Android Studio (for Android development)
+- iOS Simulator or Android Emulator
 
 ### Installation
 
@@ -31,13 +35,19 @@ GymJam is a web application that revolutionizes how music is managed in gym envi
    npm install
    ```
 
-3. Install client dependencies
+3. Install React Native dependencies
 
    ```
-   npm run install-client
+   npm install
    ```
 
-4. Create a `.env` file in the root directory with the following content:
+4. Install iOS dependencies (for iOS development)
+
+   ```
+   cd ios && pod install && cd ..
+   ```
+
+5. Create a `.env` file in the root directory with the following content:
 
    ```
    PORT=5000
@@ -48,26 +58,39 @@ GymJam is a web application that revolutionizes how music is managed in gym envi
    NODE_ENV=development
    ```
 
-5. Run the development server (backend and frontend concurrently)
+6. Run the development server (backend and mobile app)
+
+   For iOS:
    ```
-   npm run dev
+   npm run ios
    ```
 
-The server will run on `http://localhost:5000` and the client on `http://localhost:3000`
+   For Android:
+   ```
+   npm run android
+   ```
+
+   For backend server:
+   ```
+   npm run server
+   ```
 
 ## 🔨 Project Structure
 
 ```
 /
-├── client/                  # React frontend
-│   ├── public/              # Static files
-│   └── src/                 # React source code
-│       ├── components/      # Reusable components
-│       ├── context/         # Context API for state management
-│       ├── hooks/           # Custom React hooks
-│       ├── pages/           # Page components
-│       ├── utils/           # Utility functions
-│       └── api/             # API service calls
+├── src/                     # React Native source code
+│   ├── components/          # Reusable components
+│   ├── screens/             # Screen components
+│   ├── navigation/          # Navigation configuration
+│   ├── context/             # Context API for state management
+│   ├── hooks/               # Custom React hooks
+│   ├── utils/               # Utility functions
+│   ├── services/            # API service calls
+│   ├── assets/              # Images, fonts, and other assets
+│   └── theme/               # Styling and theming
+├── ios/                     # iOS native code
+├── android/                 # Android native code
 ├── config/                  # Configuration files
 ├── controllers/             # Request handlers
 ├── middleware/              # Express middleware
@@ -81,7 +104,7 @@ The server will run on `http://localhost:5000` and the client on `http://localho
 
 ### 🔐 Authentication & Onboarding
 
-- **Multi-platform access**: Available on web browsers
+- **Mobile-first experience**: Optimized for iOS and Android
 - **Flexible sign-in options**:
   - Email/password
   - Phone verification (OTP)
@@ -179,6 +202,84 @@ The server will run on `http://localhost:5000` and the client on `http://localho
 - Profile customization
 - Friend connections
 - In-app messaging (private and group)
+
+## 🔄 App Workflow
+
+### Gym Owner Workflow
+
+1. **Initial Setup**
+   - Download and install GymJam app
+   - Sign up as a Gym Owner
+   - Create gym profile with basic information
+   - Connect Spotify account
+
+2. **Gym Configuration**
+   - Set up music preferences and rules
+   - Configure voting system settings
+   - Generate unique invite codes/QR codes
+   - Set up member management policies
+
+3. **Daily Operations**
+   - Monitor current playlist and voting
+   - Review and approve song suggestions
+   - Manage member requests and communications
+   - Track engagement metrics
+
+### Gym Member Workflow
+
+1. **Onboarding**
+   - Download and install GymJam app
+   - Sign up as a Gym Member
+   - Join gym using:
+     - Invite code
+     - QR code scan
+     - Gym search and request
+
+2. **Daily Usage**
+   - View current playing song
+   - Cast votes on upcoming tracks
+   - Suggest new songs
+   - Track personal points and achievements
+   - Interact with other members
+
+3. **Premium Features**
+   - Upgrade to premium membership
+   - Access unlimited voting
+   - Use advanced workout tracking
+   - Redeem reward points
+
+### Music Management Flow
+
+1. **Playlist Creation**
+   - Gym owner creates/selects Spotify playlist
+   - Configure playback rules
+   - Set up voting parameters
+
+2. **Song Queue Management**
+   - Automatic queue generation
+   - Member voting influence
+   - Owner override capabilities
+   - Smart rotation to prevent repetition
+
+3. **Suggestion System**
+   - Members suggest songs
+   - AI-assisted filtering
+   - Owner review and approval
+   - Automatic addition to queue
+
+### Social Interaction Flow
+
+1. **Community Building**
+   - Member profile creation
+   - Friend connections
+   - Group chat formation
+   - Achievement sharing
+
+2. **Engagement Features**
+   - Live reactions to songs
+   - Leaderboard participation
+   - Reward point earning
+   - Achievement unlocking
 
 ## 🔍 Advanced Capabilities
 
