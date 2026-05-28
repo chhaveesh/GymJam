@@ -121,12 +121,21 @@
   .cover .big::before { content:"🔇 "; }
   .cover small { color:var(--dim); font-size:12px; max-width:320px; }
   button.mute {
-    margin-left:auto; padding:7px 12px; border-radius:10px; cursor:pointer; flex:0 0 auto;
+    padding:7px 12px; border-radius:10px; cursor:pointer; flex:0 0 auto;
     border:1px solid var(--line); background:rgba(255,255,255,.04); color:var(--text);
     font-family:"IBM Plex Mono",monospace; font-size:12px; white-space:nowrap;
     transition: border-color .15s, color .15s, background .15s;
   }
   button.mute.on { border-color:var(--accent); color:var(--accent); background:rgba(198,255,58,.10); }
+  button.skip {
+    padding:7px 12px; border-radius:10px; cursor:pointer; flex:0 0 auto;
+    border:1px solid var(--line); background:rgba(255,255,255,.04); color:var(--text);
+    font-family:"IBM Plex Mono",monospace; font-size:12px; white-space:nowrap;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  button.skip:hover { border-color: var(--down); }
+  button.skip.on { border-color:var(--down); color:var(--down); background:rgba(255,84,112,.12); }
+  button.skip #skipCount { opacity:.8; }
   .nowmeta { display:flex; align-items:center; gap:12px; padding: 12px 16px; }
   .onair {
     font-family:"IBM Plex Mono",monospace; font-size: 10px; letter-spacing:.18em; color:#0a0a0b;
@@ -143,10 +152,14 @@
 
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .card {
-    display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 14px;
-    padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px;
+    display: grid; grid-template-columns: 26px 64px 1fr auto; align-items: center; gap: 12px;
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px;
     background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
     animation: rise .4s both;
+  }
+  .card .thumb {
+    width: 64px; height: 48px; object-fit: cover; border-radius: 8px; background: #000;
+    border: 1px solid var(--line);
   }
   @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
   .rank { font-family:"IBM Plex Mono",monospace; color: var(--dim); font-size: 14px; text-align:center; }
@@ -268,6 +281,7 @@
             <div class="t" id="nowTitle">—</div>
             <div class="by" id="nowBy"></div>
           </div>
+          <button class="skip" id="skipBtn" title="vote to skip" style="display:none">⏭ Skip <span id="skipCount"></span></button>
           <button class="mute" id="muteBtn" title="mute / unmute">🔇 Muted</button>
         </div>
       </div>
@@ -305,6 +319,7 @@
   })();
   $("me").textContent = memberId.slice(0, 10);
   const myVotes = {}; // trackId -> "up" | "down"
+  let mySkip = false, mySkipTrack = null; // my vote-to-skip on the current track
 
   // Display name (asked once, kept in localStorage). Drives presence + addedBy.
   let myName = localStorage.getItem("gymjam_name") || "";
@@ -330,6 +345,11 @@
   const advance = (finishedId) => api(`/api/gyms/${GYM}/advance`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ finishedId }),
+  });
+  const skipVote = () => api(`/api/gyms/${GYM}/skip`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID?.() || String(Math.random()) },
+    body: JSON.stringify({ memberId }),
   });
 
   // ---- Name modal ----
@@ -441,6 +461,26 @@
   $("muteBtn").addEventListener("click", () => setMuted(!muted));
   $("muteCover").addEventListener("click", () => setMuted(false));
 
+  // ---- Vote to skip (majority of the active room skips the current song) ----
+  function updateSkipUI() {
+    const np = state.nowPlaying;
+    const btn = $("skipBtn");
+    if (!btn) return;
+    if (!np) { btn.style.display = "none"; return; }
+    btn.style.display = "";
+    const v = np.skipVotes || 0, n = np.skipNeeded || 1;
+    $("skipCount").textContent = `(${v}/${n})`;
+    btn.classList.toggle("on", mySkip);
+  }
+  async function onSkip() {
+    if (!state.nowPlaying) return;
+    mySkip = !mySkip;        // optimistic toggle; server broadcast confirms the count
+    updateSkipUI();
+    try { await skipVote(); }
+    catch (e) { mySkip = !mySkip; updateSkipUI(); showErr(e.message); }
+  }
+  $("skipBtn").addEventListener("click", onSkip);
+
   async function onEnded() {
     const finished = loadedId;
     loadedId = null;
@@ -460,8 +500,12 @@
     if (np) {
       $("nowTitle").textContent = np.title;
       $("nowBy").textContent = "added by " + (np.addedBy || "anon");
+      if (np.trackId !== mySkipTrack) { mySkipTrack = np.trackId; mySkip = false; } // new song → reset my skip
+    } else {
+      mySkipTrack = null; mySkip = false;
     }
     updateMuteUI(); // show/hide the "tap for sound" cover based on song + mute state
+    updateSkipUI(); // refresh the skip button + live count
 
     // Up-next list = the queue minus the track that's currently on air.
     const upNext = state.queue.filter((t) => !np || t.trackId !== np.trackId);
@@ -478,6 +522,7 @@
       const mine = myVotes[t.trackId];
       li.innerHTML = `
         <div class="rank">${i + 1}</div>
+        <img class="thumb" loading="lazy" src="https://i.ytimg.com/vi/${esc(t.videoId)}/mqdefault.jpg" alt="" onerror="this.style.visibility='hidden'" />
         <div style="min-width:0">
           <div class="title">${esc(t.title)}</div>
           <div class="meta">by ${esc(t.addedBy || "anon")}</div>

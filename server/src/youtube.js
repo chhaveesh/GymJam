@@ -67,3 +67,34 @@ export async function search(q, max = 8) {
 }
 
 export const searchEnabled = () => Boolean(process.env.YOUTUBE_API_KEY);
+
+// --- Seed pool for auto-queue (Step 3) -----------------------------------------
+// Used to keep a fresh gym from being empty: we top the queue up to ~10 tracks
+// from this pool. Override with SEED_VIDEO_IDS="id1,id2,..." (comma-separated).
+// In Step 4 the ML recommender becomes the source; this stays as the fallback.
+const DEFAULT_SEED_IDS = [
+  "dQw4w9WgXcQ", // Rick Astley — Never Gonna Give You Up
+  "OPf0YbXqDm0", // Mark Ronson ft. Bruno Mars — Uptown Funk
+  "kJQP7kiw5Fk", // Luis Fonsi — Despacito
+  "9bZkp7q19f0", // PSY — Gangnam Style
+  "JGwWNGJdvx8", // Ed Sheeran — Shape of You
+  "RgKAFK5djSk", // Wiz Khalifa — See You Again
+  "CevxZvSJLk8", // Katy Perry — Roar
+  "hT_nvWreIhg", // OneRepublic — Counting Stars
+  "09R8_2nJtjg", // Maroon 5 — Sugar
+  "60ItHLz5WEA", // Alan Walker — Faded
+  "7wtfhZwyrcc", // Imagine Dragons — Believer
+  "YQHsXMglC9A", // Adele — Hello
+  "pRpeEdMmmQ0", // Shakira — Waka Waka
+  "fLexgOxsZu0", // Imagine Dragons — Thunder
+  "2Vv-BfVoq4g", // Ed Sheeran — Perfect
+];
+
+export function seedVideoIds() {
+  const raw = process.env.SEED_VIDEO_IDS;
+  if (raw) {
+    const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length) return ids;
+  }
+  return DEFAULT_SEED_IDS;
+}

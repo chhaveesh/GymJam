@@ -11,6 +11,7 @@ import { subscriber, keys } from "./redis.js";
 import {
   castVote, getTally, startFlushWorker,
   addTrack, advance, getState, publishState,
+  voteSkip, maybeSkip, autofill,
 } from "./votes.js";
 import { heartbeat, leave, startPresenceSweeper } from "./presence.js";
 import { parseVideoId, fetchTitle, search, searchEnabled } from "./youtube.js";
@@ -40,17 +41,34 @@ app.get("/api/gyms/:gymId/state", async (req, res) => {
 // still hands phones a scannable address).
 function lanIp() {
   const ifaces = networkInterfaces();
-  const candidates = [];
-  for (const list of Object.values(ifaces)) {
+
+  for (const [name, list] of Object.entries(ifaces)) {
+    // Skip docker/virtual interfaces
+    if (
+      name.includes("docker") ||
+      name.includes("br-") ||
+      name.includes("veth") ||
+      name.includes("utun")
+    ) {
+      continue;
+    }
+
     for (const ni of list || []) {
       if (ni.family !== "IPv4" || ni.internal) continue;
-      candidates.push(ni.address);
+
+      // Prefer 192.168.x.x
+      if (ni.address.startsWith("192.168.")) {
+        return ni.address;
+      }
+
+      // Then prefer 10.x.x.x
+      if (ni.address.startsWith("10.")) {
+        return ni.address;
+      }
     }
   }
-  // Prefer common private LAN ranges, else the first non-internal IPv4.
-  const priv = candidates.find((a) =>
-    /^192\.168\./.test(a) || /^10\./.test(a) || /^172\.(1[6-9]|2\d|3[01])\./.test(a));
-  return priv || candidates[0] || "localhost";
+
+  return "localhost";
 }
 
 function resolveBase(req) {
@@ -114,6 +132,28 @@ app.post("/api/gyms/:gymId/advance", async (req, res) => {
   }
 });
 
+// --- Vote to skip the current track (majority of the active room skips it) ------
+// Header: Idempotency-Key. Body: { memberId }. Skips when votes > activeUsers/2.
+app.post("/api/gyms/:gymId/skip", async (req, res) => {
+  try {
+    const { memberId } = req.body;
+    if (!memberId) return res.status(400).json({ error: "memberId required" });
+    const idemKey = req.get("Idempotency-Key") || randomUUID();
+    res.json(await voteSkip({ gymId: req.params.gymId, memberId, idemKey }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// --- Top the queue up to ~10 tracks from the seed pool (auto-queue) -------------
+app.post("/api/gyms/:gymId/autofill", async (req, res) => {
+  try {
+    res.json(await autofill({ gymId: req.params.gymId }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // --- Optional: type-to-search (only if YOUTUBE_API_KEY is set) ------------------
 app.get("/api/youtube/search", async (req, res) => {
   try {
@@ -161,6 +201,9 @@ wss.on("connection", (ws, req) => {
   getState(gymId).then((s) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "state", ...s }));
   }).catch(() => {});
+  // Auto-queue: keep the floor from being empty by topping up to ~10 tracks.
+  // autofill is locked + idempotent, so concurrent connects won't double-seed.
+  autofill({ gymId }).catch(() => {});
 
   // Presence: the client says "hello" with its name on connect, then sends a
   // periodic "heartbeat". Both refresh lastSeen; we only re-broadcast when the
@@ -187,7 +230,12 @@ wss.on("connection", (ws, req) => {
   ws.on("close", async () => {
     rooms.get(gymId)?.delete(ws);
     if (ws.memberId) {
-      try { await leave(gymId, ws.memberId); await publishState(gymId); } catch {}
+      try {
+        await leave(gymId, ws.memberId);
+        // A smaller room lowers the skip bar — an existing set of skip votes may
+        // now be a majority. Re-check; if it doesn't skip, just broadcast.
+        if (!(await maybeSkip(gymId))) await publishState(gymId);
+      } catch {}
     }
   });
 });
@@ -203,7 +251,11 @@ subscriber.on("pmessage", (_pattern, channel, message) => {
 });
 
 const stop = startFlushWorker();
-const stopPresence = startPresenceSweeper(publishState);
+// On timeout-driven presence changes, re-check skip (smaller room → lower bar),
+// then broadcast. maybeSkip already broadcasts when it skips.
+const stopPresence = startPresenceSweeper(async (gymId) => {
+  if (!(await maybeSkip(gymId))) await publishState(gymId);
+});
 await connectMongo();
 server.listen(PORT, () => console.log(`GymJam API on :${PORT}`));
 

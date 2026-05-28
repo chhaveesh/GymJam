@@ -35,4 +35,7 @@ export const keys = {
   // --- synced playback additions (Step 1.5) ---
   startedAt:(g)       => `gym:${g}:startedAt`,// string: ms epoch when the current track started (server clock)
   advLock: (g, t)     => `gym:${g}:adv:${t}`, // short-lived lock so N "ended" reports promote the next song once
+  // --- vote-to-skip + auto-queue (Steps 2 & 3) ---
+  skip:    (g, t)     => `gym:${g}:skip:${t}`,// set: memberIds who voted to skip the current track t
+  seedLock:(g)        => `gym:${g}:seeding`,  // lock so concurrent auto-fills don't double-seed a gym
 };
