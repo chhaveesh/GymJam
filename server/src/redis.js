@@ -29,4 +29,7 @@ export const keys = {
   queue:  (g)         => `gym:${g}:queue`,   // zset: member=trackId, score=tally
   meta:   (g)         => `gym:${g}:meta`,    // hash: field=trackId -> JSON {videoId,title,addedBy,addedAt}
   now:    (g)         => `gym:${g}:now`,     // string: trackId currently playing on the floor
+  // --- presence additions (Step 1) ---
+  presence:(g)        => `gym:${g}:presence`,// zset: member=memberId, score=lastSeen(ms)
+  names:   (g)        => `gym:${g}:names`,    // hash: field=memberId -> display name
 };

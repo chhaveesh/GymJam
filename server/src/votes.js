@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { redis, keys } from "./redis.js";
 import { getDb } from "./mongo.js";
+import { getActiveUsers } from "./presence.js";
 
 const IDEM_TTL = Number(process.env.IDEM_TTL || 86400); // 24h
 const FLUSH_MS = Number(process.env.FLUSH_MS || 500);
@@ -96,12 +97,13 @@ async function removeTrack(gymId, trackId) {
   }
 }
 
-/** Full room snapshot: what's playing + the queue ordered by votes (desc). */
+/** Full room snapshot: what's playing + the queue ordered by votes (desc) + who's here. */
 export async function getState(gymId) {
-  const [nowId, flat, metaAll] = await Promise.all([
+  const [nowId, flat, metaAll, activeUsers] = await Promise.all([
     redis.get(keys.now(gymId)),
     redis.zrevrange(keys.queue(gymId), 0, -1, "WITHSCORES"),
     redis.hgetall(keys.meta(gymId)),
+    getActiveUsers(gymId),
   ]);
 
   const queue = [];
@@ -116,7 +118,7 @@ export async function getState(gymId) {
   const nowPlaying =
     nowId && metaAll[nowId] ? { trackId: nowId, ...JSON.parse(metaAll[nowId]) } : null;
 
-  return { gymId, nowPlaying, queue };
+  return { gymId, nowPlaying, queue, activeUsers };
 }
 
 /** Broadcast the full snapshot to the gym's room via Redis pub/sub. */

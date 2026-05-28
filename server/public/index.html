@@ -24,13 +24,60 @@
     color: var(--text); font-family: "Archivo", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 640px; margin: 0 auto; padding: 36px 20px 80px; }
+
+  /* --- two-column app shell: active users on the LEFT, floor on the right --- */
+  .app {
+    display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 26px;
+    max-width: 1060px; margin: 0 auto; padding: 32px 22px 80px;
+  }
+  @media (max-width: 840px) {
+    .app { grid-template-columns: 1fr; gap: 18px; padding: 24px 16px 70px; }
+    .sidebar { order: 2; }
+  }
 
   header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
   .mark { font-family: "Bebas Neue", sans-serif; font-size: 46px; letter-spacing: 2px; line-height: .9; }
   .mark b { color: var(--accent); }
   .sub { color: var(--dim); font-size: 13px; font-weight: 500; }
 
+  /* --- SIDEBAR --- */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; align-self: start; position: sticky; top: 24px; }
+  .panel {
+    border: 1px solid var(--line); border-radius: 16px; padding: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+  }
+  .panel h3 {
+    margin: 0 0 12px; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--dim); font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel h3 .count {
+    color: #0a0a0b; background: var(--accent); border-radius: 999px;
+    padding: 2px 9px; font-size: 11px; font-weight: 700;
+  }
+  /* QR card */
+  .qrcard { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .qrbox { background: #fff; border-radius: 12px; padding: 10px; width: 168px; height: 168px; display: flex; }
+  .qrbox svg, .qrbox img { width: 100%; height: 100%; display: block; }
+  .qrcard small { color: var(--dim); font-size: 11px; font-family: "IBM Plex Mono", monospace; text-align: center; line-height: 1.5; }
+  .qrcard small b { color: var(--text); }
+  /* active users */
+  .users { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
+  .user {
+    display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 10px;
+    background: rgba(255,255,255,.025); border: 1px solid transparent;
+  }
+  .user.self { border-color: rgba(198,255,58,.35); background: rgba(198,255,58,.07); }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%; flex: 0 0 26px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Bebas Neue", sans-serif; font-size: 15px; color: #0a0a0b; letter-spacing: 1px;
+  }
+  .uname { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .uname .youtag { color: var(--accent); font-family: "IBM Plex Mono", monospace; font-size: 10px; margin-left: 5px; }
+  .users .empty { color: var(--dim); font-size: 12px; font-family: "IBM Plex Mono", monospace; padding: 4px 2px; }
+
+  /* --- MAIN COLUMN --- */
   .bar {
     display: flex; align-items: center; gap: 10px; margin: 22px 0 8px;
     padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
@@ -120,53 +167,105 @@
 
   footer { margin-top: 30px; color: var(--dim); font-size: 11.5px; font-family:"IBM Plex Mono",monospace; }
   footer span { color: var(--accent); }
+
+  /* --- NAME MODAL (first join) --- */
+  .modal {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(6,6,7,.86); backdrop-filter: blur(6px);
+  }
+  .modal.open { display: flex; }
+  .modalcard {
+    width: 100%; max-width: 380px; border: 1px solid var(--line); border-radius: 18px; padding: 26px;
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)), var(--panel);
+    animation: rise .35s both;
+  }
+  .modalcard .mark { font-size: 40px; }
+  .modalcard p { color: var(--dim); font-size: 13px; margin: 6px 0 18px; }
+  .modalcard input {
+    width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.03); color: var(--text); font-family: "Archivo"; font-size: 16px; outline: none;
+  }
+  .modalcard input:focus { border-color: var(--accent); }
+  .modalcard button {
+    width: 100%; margin-top: 12px; padding: 13px; border: 0; border-radius: 12px; cursor: pointer;
+    background: var(--accent); color: #0a0a0b; font-weight: 700; font-family: "Archivo"; font-size: 15px; letter-spacing: .02em;
+  }
+  .modalcard .merr { color: var(--down); font-size: 12px; font-family: "IBM Plex Mono", monospace; min-height: 14px; margin-top: 8px; }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
+  <!-- NAME MODAL -->
+  <div class="modal" id="nameModal">
+    <div class="modalcard">
       <div class="mark">GYM<b>JAM</b></div>
-      <div class="sub">the room picks the queue · the top track plays</div>
-    </header>
-
-    <div class="bar">
-      <label for="gym">gym</label>
-      <input id="gym" spellcheck="false" />
-      <span id="dot" class="dot" title="connection"></span>
+      <p>You're joining the floor. What should we call you?</p>
+      <input id="nameInput" maxlength="40" placeholder="Your name…" autocomplete="off" spellcheck="false" />
+      <button id="nameGo">Join the floor</button>
+      <div class="merr" id="nameErr"></div>
     </div>
+  </div>
 
-    <!-- NOW PLAYING -->
-    <div class="now">
-      <div class="stage" id="stage">
-        <div class="empty" id="stageEmpty">No track playing — add one below.</div>
-        <div id="player"></div>
-        <div class="overlay" id="overlay" style="display:none">
-          <div class="big">Play on this screen</div>
-          <small>Tap to make this device the floor speaker. It’ll auto-play the top-voted track and roll to the next when each song ends.</small>
+  <div class="app">
+    <!-- LEFT SIDEBAR: scan-to-join + active users -->
+    <aside class="sidebar">
+      <div class="panel qrcard">
+        <h3>Scan to join</h3>
+        <div class="qrbox"><img id="qr" alt="Scan to join this gym" /></div>
+        <small>Same Wi-Fi? Scan to vote on <b id="qrGym">—</b></small>
+      </div>
+      <div class="panel">
+        <h3>On the floor <span class="count" id="userCount">0</span></h3>
+        <div class="users" id="users"><div class="empty">Nobody here yet…</div></div>
+      </div>
+    </aside>
+
+    <!-- MAIN COLUMN: floor + queue -->
+    <main>
+      <header>
+        <div class="mark">GYM<b>JAM</b></div>
+        <div class="sub">the room picks the queue · the top track plays</div>
+      </header>
+
+      <div class="bar">
+        <label for="gym">gym</label>
+        <input id="gym" spellcheck="false" />
+        <span id="dot" class="dot" title="connection"></span>
+      </div>
+
+      <!-- NOW PLAYING -->
+      <div class="now">
+        <div class="stage" id="stage">
+          <div class="empty" id="stageEmpty">No track playing — add one below.</div>
+          <div id="player"></div>
+          <div class="overlay" id="overlay" style="display:none">
+            <div class="big">Play on this screen</div>
+            <small>Tap to make this device the floor speaker. It’ll auto-play the top-voted track and roll to the next when each song ends.</small>
+          </div>
+        </div>
+        <div class="nowmeta" id="nowmeta" style="display:none">
+          <span class="onair">ON AIR</span>
+          <div style="min-width:0">
+            <div class="t" id="nowTitle">—</div>
+            <div class="by" id="nowBy"></div>
+          </div>
         </div>
       </div>
-      <div class="nowmeta" id="nowmeta" style="display:none">
-        <span class="onair">ON AIR</span>
-        <div style="min-width:0">
-          <div class="t" id="nowTitle">—</div>
-          <div class="by" id="nowBy"></div>
-        </div>
+
+      <div class="hint">Anyone with a YouTube link can add a song. Highest tally floats to the top and plays next. <b id="floorState">No screen is playing yet.</b></div>
+
+      <div class="add">
+        <input id="newtrack" placeholder="Paste a YouTube link…" />
+        <button id="addbtn">Add</button>
       </div>
-    </div>
+      <div class="results" id="results"></div>
+      <div class="err" id="err"></div>
 
-    <div class="hint">Anyone with a YouTube link can add a song. Highest tally floats to the top and plays next. <b id="floorState">No screen is playing yet.</b></div>
+      <div class="section">Up next — ranked by votes</div>
+      <ul id="list"></ul>
 
-    <div class="add">
-      <input id="newtrack" placeholder="Paste a YouTube link…" />
-      <button id="addbtn">Add</button>
-    </div>
-    <div class="results" id="results"></div>
-    <div class="err" id="err"></div>
-
-    <div class="section">Up next — ranked by votes</div>
-    <ul id="list"></ul>
-
-    <footer>member <span id="me"></span> · realtime via redis pub/sub → websocket</footer>
+      <footer>member <span id="me"></span> · realtime via redis pub/sub → websocket</footer>
+    </main>
   </div>
 
 <script>
@@ -175,6 +274,8 @@
   const params = new URLSearchParams(location.search);
   const GYM = params.get("gym") || "demo-gym";
   $("gym").value = GYM;
+  $("qrGym").textContent = GYM;
+  $("qr").src = `/api/gyms/${encodeURIComponent(GYM)}/qr.svg`;
 
   // Stable per-device identity + per-track local vote memory (for toggle UX).
   const memberId = (() => {
@@ -185,7 +286,10 @@
   $("me").textContent = memberId.slice(0, 10);
   const myVotes = {}; // trackId -> "up" | "down"
 
-  let state = { nowPlaying: null, queue: [] };
+  // Display name (asked once, kept in localStorage). Drives presence + addedBy.
+  let myName = localStorage.getItem("gymjam_name") || "";
+
+  let state = { nowPlaying: null, queue: [], activeUsers: [] };
   let searchEnabled = false;
 
   // ---- API ----
@@ -196,7 +300,7 @@
   });
   const addTrack = (input) => api(`/api/gyms/${GYM}/tracks`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: input, addedBy: memberId.slice(0, 10) }),
+    body: JSON.stringify({ url: input, addedBy: myName || memberId.slice(0, 10) }),
   });
   const vote = (trackId, direction) => api(`/api/gyms/${GYM}/tracks/${trackId}/vote`, {
     method: "POST",
@@ -207,6 +311,24 @@
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ finishedId }),
   });
+
+  // ---- Name modal ----
+  function ensureName() {
+    if (myName) return true;
+    $("nameModal").classList.add("open");
+    setTimeout(() => $("nameInput").focus(), 50);
+    return false;
+  }
+  function submitName() {
+    const v = $("nameInput").value.trim();
+    if (v.length < 1) { $("nameErr").textContent = "Enter a name to join."; return; }
+    myName = v.slice(0, 40);
+    localStorage.setItem("gymjam_name", myName);
+    $("nameModal").classList.remove("open");
+    sayHello(); // announce presence immediately
+  }
+  $("nameGo").addEventListener("click", submitName);
+  $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") submitName(); });
 
   // ---- YouTube IFrame player (only on the screen that "takes the floor") ----
   let player = null, ytReady = false, isPlayer = false, loadedId = null, wantFloor = false;
@@ -251,6 +373,8 @@
 
   // ---- Render ----
   function render() {
+    renderUsers();
+
     const np = state.nowPlaying;
     $("stageEmpty").style.display = np ? "none" : "flex";
     $("nowmeta").style.display = np ? "flex" : "none";
@@ -304,6 +428,27 @@
     });
   }
 
+  // ---- Active users panel (left sidebar) ----
+  const AV_COLORS = ["#c6ff3a","#ff5470","#5ec8ff","#ffb14e","#b78bff","#5cffa8","#ff8be0"];
+  function avatarColor(id){ let h=0; for (const c of id) h=(h*31+c.charCodeAt(0))>>>0; return AV_COLORS[h % AV_COLORS.length]; }
+  function renderUsers() {
+    const users = state.activeUsers || [];
+    $("userCount").textContent = users.length;
+    const box = $("users");
+    box.innerHTML = "";
+    if (!users.length) { box.innerHTML = '<div class="empty">Nobody here yet…</div>'; return; }
+    users.forEach((u) => {
+      const row = document.createElement("div");
+      const isSelf = u.memberId === memberId;
+      row.className = "user" + (isSelf ? " self" : "");
+      const initial = (u.name || "?").trim().charAt(0).toUpperCase() || "?";
+      row.innerHTML = `
+        <div class="avatar" style="background:${avatarColor(u.memberId)}">${esc(initial)}</div>
+        <div class="uname">${esc(u.name || "anon")}${isSelf ? '<span class="youtag">you</span>' : ""}</div>`;
+      box.appendChild(row);
+    });
+  }
+
   async function onVote(trackId, dir) {
     // Tapping your current vote again clears it (toggle).
     const direction = myVotes[trackId] === dir ? "clear" : dir;
@@ -344,16 +489,32 @@
   function showErr(m){ $("err").textContent = m || ""; }
   function esc(s){ return String(s).replace(/[&<>"]/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
-  // ---- WebSocket: live state for the whole room ----
-  let ws, backoff = 500;
+  // ---- WebSocket: live state for the whole room + presence heartbeat ----
+  let ws, backoff = 500, hbTimer = null;
+  function sayHello() {
+    if (ws && ws.readyState === WebSocket.OPEN && myName) {
+      ws.send(JSON.stringify({ type: "hello", memberId, name: myName }));
+    }
+  }
+  function startHeartbeat() {
+    stopHeartbeat();
+    hbTimer = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "heartbeat", memberId }));
+    }, 10000);
+  }
+  function stopHeartbeat() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } }
+
   function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(`${proto}://${location.host}/?gym=${encodeURIComponent(GYM)}`);
-    ws.onopen = () => { backoff = 500; $("dot").classList.add("live"); };
-    ws.onclose = () => { $("dot").classList.remove("live"); setTimeout(connect, backoff); backoff = Math.min(backoff*2, 8000); };
+    ws.onopen = () => { backoff = 500; $("dot").classList.add("live"); sayHello(); startHeartbeat(); };
+    ws.onclose = () => { $("dot").classList.remove("live"); stopHeartbeat(); setTimeout(connect, backoff); backoff = Math.min(backoff*2, 8000); };
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
-      if (msg.type === "state") { state = { nowPlaying: msg.nowPlaying, queue: msg.queue }; render(); syncPlayer(); }
+      if (msg.type === "state") {
+        state = { nowPlaying: msg.nowPlaying, queue: msg.queue, activeUsers: msg.activeUsers || [] };
+        render(); syncPlayer();
+      }
     };
   }
 
@@ -363,7 +524,8 @@
     if (searchEnabled) $("newtrack").placeholder = "Paste a YouTube link, or search…";
     try { state = await api(`/api/gyms/${GYM}/state`); } catch {}
     render();
-    connect();
+    ensureName();  // prompt for a name if we don't have one yet
+    connect();     // sayHello() fires on open once a name exists
   })();
 })();
 </script>

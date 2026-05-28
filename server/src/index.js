@@ -4,12 +4,14 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import QRCode from "qrcode";
 import { connectMongo } from "./mongo.js";
 import { subscriber, keys } from "./redis.js";
 import {
   castVote, getTally, startFlushWorker,
-  addTrack, advance, getState,
+  addTrack, advance, getState, publishState,
 } from "./votes.js";
+import { heartbeat, leave, startPresenceSweeper } from "./presence.js";
 import { parseVideoId, fetchTitle, search, searchEnabled } from "./youtube.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -29,6 +31,24 @@ app.use(express.static(join(__dirname, "../public")));
 // --- Room state: now-playing + queue ordered by votes --------------------------
 app.get("/api/gyms/:gymId/state", async (req, res) => {
   res.json(await getState(req.params.gymId));
+});
+
+// --- QR code so anyone on the same network can join the floor -------------------
+// Encodes the floor URL using the Host the screen reached us on (the LAN IP),
+// which is exactly the address other phones on the network should open.
+app.get("/api/gyms/:gymId/qr.svg", async (req, res) => {
+  try {
+    const proto = req.headers["x-forwarded-proto"] || req.protocol;
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const joinUrl = `${proto}://${host}/?gym=${encodeURIComponent(req.params.gymId)}`;
+    const svg = await QRCode.toString(joinUrl, {
+      type: "svg", margin: 1, errorCorrectionLevel: "M",
+      color: { dark: "#0a0a0b", light: "#ffffff" },
+    });
+    res.type("image/svg+xml").set("Cache-Control", "no-store").send(svg);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Add a song (anyone with a YouTube link or, if enabled, a search) ----------
@@ -97,13 +117,36 @@ const rooms = new Map(); // gymId -> Set<ws>
 wss.on("connection", (ws, req) => {
   const gymId = new URL(req.url, "http://x").searchParams.get("gym");
   if (!gymId) return ws.close();
+  ws.gymId = gymId;
   if (!rooms.has(gymId)) rooms.set(gymId, new Set());
   rooms.get(gymId).add(ws);
   // Send a snapshot immediately so a fresh client renders without waiting for an event.
   getState(gymId).then((s) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "state", ...s }));
   }).catch(() => {});
-  ws.on("close", () => rooms.get(gymId)?.delete(ws));
+
+  // Presence: the client says "hello" with its name on connect, then sends a
+  // periodic "heartbeat". Both refresh lastSeen; we only re-broadcast when the
+  // active set actually changes (a brand-new member or a returning timed-out one).
+  ws.on("message", async (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+    if (msg.type === "hello" || msg.type === "heartbeat") {
+      if (!msg.memberId) return;
+      ws.memberId = msg.memberId;
+      try {
+        const changed = await heartbeat(gymId, msg.memberId, msg.name);
+        if (changed) await publishState(gymId);
+      } catch {}
+    }
+  });
+
+  ws.on("close", async () => {
+    rooms.get(gymId)?.delete(ws);
+    if (ws.memberId) {
+      try { await leave(gymId, ws.memberId); await publishState(gymId); } catch {}
+    }
+  });
 });
 
 // One subscriber connection fans out Redis messages to local WS clients. Run N
@@ -117,7 +160,8 @@ subscriber.on("pmessage", (_pattern, channel, message) => {
 });
 
 const stop = startFlushWorker();
+const stopPresence = startPresenceSweeper(publishState);
 await connectMongo();
 server.listen(PORT, () => console.log(`GymJam API on :${PORT}`));
 
-process.on("SIGTERM", () => { stop(); server.close(); });
+process.on("SIGTERM", () => { stop(); stopPresence(); server.close(); });

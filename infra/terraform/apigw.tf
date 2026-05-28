@@ -1,5 +1,5 @@
 # API Gateway (HTTP API) in front of the ALB via a VPC Link — this is what makes
-# the "API Gateway + ALB" CV claim literally true. Public traffic can hit either
+# the "API Gateway + ALB" Public traffic can hit either
 # the ALB DNS directly or the API Gateway invoke URL.
 resource "aws_apigatewayv2_api" "http" {
   name          = "${var.app_name}-api"
