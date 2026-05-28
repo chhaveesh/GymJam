@@ -3,13 +3,16 @@ import { redis, keys } from "./redis.js";
 import { getDb } from "./mongo.js";
 import { getActiveUsers, countActiveUsers } from "./presence.js";
 import { fetchTitle, seedVideoIds } from "./youtube.js";
-import { recommend, scoreCandidates, recommenderEnabled } from "./recommender.js";
 
 const IDEM_TTL = Number(process.env.IDEM_TTL || 86400); // 24h
 const FLUSH_MS = Number(process.env.FLUSH_MS || 500);
 
 /**
  * Cast or change a member's vote. Returns { tally, deduped }.
+ *
+ * idemKey is a client-generated UUID per user *action*. A network retry of the
+ * same action reuses the key (→ counted once); a genuine vote change is a new
+ * action with a new key (→ processed). This is the idempotency guarantee.
  *
  * The Lua script also re-scores this track in the gym's ranked queue, so the
  * order the floor plays from updates atomically with the tally.
@@ -18,6 +21,8 @@ export async function castVote({ gymId, trackId, memberId, direction, idemKey })
   if (!["up", "down", "clear"].includes(direction)) {
     throw new Error(`invalid direction: ${direction}`);
   }
+  // A missing key must mean "a unique action", never a shared "idem:undefined"
+  // bucket that would silently dedupe every keyless vote into one.
   idemKey = idemKey || randomUUID();
   const [tally, deduped] = await redis.castVote(
     keys.tally(gymId, trackId),
@@ -27,11 +32,11 @@ export async function castVote({ gymId, trackId, memberId, direction, idemKey })
     keys.queue(gymId),
     direction,
     String(IDEM_TTL),
-    `${gymId}:${trackId}`,
-    trackId
+    `${gymId}:${trackId}`, // dirty member
+    trackId                // queue member
   );
 
-  await publishState(gymId);
+  await publishState(gymId); // live reorder for everyone in the room
   return { tally, deduped: Boolean(deduped) };
 }
 
@@ -39,8 +44,14 @@ export async function getTally(gymId, trackId) {
   return Number((await redis.get(keys.tally(gymId, trackId))) || 0);
 }
 
+/**
+ * Add a track to a gym's queue (no broadcast — used by addTrack and autofill).
+ * Idempotent on videoId: adding the same song twice keeps its existing votes
+ * (ZADD NX won't reset the score). The first track added with nothing playing
+ * becomes the floor's "now playing" and starts the shared clock.
+ */
 async function addTrackRaw({ gymId, videoId, title, addedBy }) {
-  const trackId = videoId;
+  const trackId = videoId; // trackId IS the YouTube id, so votes & adds line up
   const meta = JSON.stringify({
     videoId,
     title: title || videoId,
@@ -49,7 +60,7 @@ async function addTrackRaw({ gymId, videoId, title, addedBy }) {
   });
   await redis.hset(keys.meta(gymId), trackId, meta);
   await redis.zadd(keys.queue(gymId), "NX", 0, trackId);
-  const became = await redis.set(keys.now(gymId), trackId, "NX");
+  const became = await redis.set(keys.now(gymId), trackId, "NX"); // only if nothing playing yet
   if (became) await redis.set(keys.startedAt(gymId), String(Date.now()));
   return trackId;
 }
@@ -60,13 +71,22 @@ export async function addTrack(args) {
   return getState(args.gymId);
 }
 
+/**
+ * The floor finished a track. Drop it from the queue and promote the next
+ * highest-voted song to "now playing". Guarded so a stale/duplicate "ended"
+ * event from one screen can't skip a song that's actually still playing — and,
+ * now that EVERY screen plays, so N simultaneous "ended" reports promote the
+ * next song exactly once (a short Redis lock per finished track).
+ */
 export async function advance({ gymId, finishedId }) {
   const current = await redis.get(keys.now(gymId));
   if (finishedId && current && finishedId !== current) {
-    return getState(gymId);
+    return getState(gymId); // stale event — ignore, don't skip the live song
   }
   const toRemove = finishedId || current;
   if (toRemove) {
+    // First "ended" report wins the lock and performs the promotion; the rest
+    // (from other screens) see the lock held and bail out as no-ops.
     const won = await redis.set(keys.advLock(gymId, toRemove), "1", "NX", "EX", 5);
     if (!won) return getState(gymId);
     await removeTrack(gymId, toRemove);
@@ -75,7 +95,7 @@ export async function advance({ gymId, finishedId }) {
   const [nextId] = await redis.zrevrange(keys.queue(gymId), 0, 0);
   if (nextId) {
     await redis.set(keys.now(gymId), nextId);
-    await redis.set(keys.startedAt(gymId), String(Date.now()));
+    await redis.set(keys.startedAt(gymId), String(Date.now())); // restart the shared clock
   } else {
     await redis.del(keys.now(gymId));
     await redis.del(keys.startedAt(gymId));
@@ -85,11 +105,13 @@ export async function advance({ gymId, finishedId }) {
   return getState(gymId);
 }
 
+/** Remove a track entirely: queue entry, metadata, tally, skip set, and per-member votes. */
 async function removeTrack(gymId, trackId) {
   await redis.zrem(keys.queue(gymId), trackId);
   await redis.hdel(keys.meta(gymId), trackId);
   await redis.del(keys.tally(gymId, trackId));
-  await redis.del(keys.skip(gymId, trackId));
+  await redis.del(keys.skip(gymId, trackId)); // skip votes don't carry to the next song
+  // Clear this track's per-member vote keys so a future re-add starts clean.
   const pattern = `gym:${gymId}:track:${trackId}:m:*`;
   const stream = redis.scanStream({ match: pattern, count: 200 });
   for await (const batch of stream) {
@@ -97,14 +119,21 @@ async function removeTrack(gymId, trackId) {
   }
 }
 
+/** Skip threshold: strictly more than half the active room. */
 function skipThreshold(active) {
   return Math.floor(active / 2) + 1;
 }
 
+/**
+ * Vote to skip the current track (toggle). When skip votes reach
+ * floor(active/2)+1 — i.e. strictly more than half the room — the song is
+ * skipped (advance to the next). Idempotent per action via idemKey.
+ */
 export async function voteSkip({ gymId, memberId, idemKey }) {
   const current = await redis.get(keys.now(gymId));
   if (!current) return { skipped: false, votes: 0, needed: 0, active: 0, current: null };
 
+  // Idempotency: a retried request must not flip the toggle twice.
   idemKey = idemKey || randomUUID();
   const fresh = await redis.set(keys.idem(idemKey), "1", "NX", "EX", String(IDEM_TTL));
 
@@ -121,13 +150,18 @@ export async function voteSkip({ gymId, memberId, idemKey }) {
   const needed = skipThreshold(active);
 
   if (votes >= needed) {
-    await advance({ gymId, finishedId: current });
+    await advance({ gymId, finishedId: current }); // skip = advance the current song
     return { skipped: true, votes, needed, active, current };
   }
-  await publishState(gymId);
+  await publishState(gymId); // broadcast the updated skip count to everyone
   return { skipped: false, votes, needed, active, current };
 }
 
+/**
+ * Re-check the skip threshold for the current song. Called when the room size
+ * changes (someone leaves), since a smaller room lowers the bar and may tip an
+ * already-cast set of skip votes over the line. Returns true if it skipped.
+ */
 export async function maybeSkip(gymId) {
   const current = await redis.get(keys.now(gymId));
   if (!current) return false;
@@ -142,12 +176,9 @@ export async function maybeSkip(gymId) {
 }
 
 /**
- * Auto-queue. Keeps a gym from sitting empty by topping up to `target` tracks.
- *
- * Step 4: when the recommender is enabled we ask it to score the unused portion
- * of the seed pool for THIS gym and pick from the top scores first. When it's
- * unreachable (or disabled) we shuffle, exactly as before — votes stay primary,
- * the recommender only changes WHICH seeds we offer, never the order they play.
+ * Keep a gym from sitting empty: top the queue up to `target` tracks from the
+ * seed pool (Step 3). A short lock stops concurrent connects from double-seeding.
+ * In Step 4 the recommender becomes the source of these picks.
  */
 export async function autofill({ gymId, target = Number(process.env.SEED_TARGET || 10) }) {
   const size = await redis.zcard(keys.queue(gymId));
@@ -161,28 +192,15 @@ export async function autofill({ gymId, target = Number(process.env.SEED_TARGET 
 
     const existing = new Set(Object.keys(await redis.hgetall(keys.meta(gymId))));
     const pool = seedVideoIds().filter((id) => !existing.has(id));
-
-    let picks;
-    if (recommenderEnabled() && pool.length) {
-      // Ask the recommender to rank candidate seeds for this gym.
-      const scores = await scoreCandidates({ gymId, candidates: pool });
-      if (scores.size) {
-        const sorted = [...pool].sort(
-          (a, b) => (scores.get(b) ?? -Infinity) - (scores.get(a) ?? -Infinity)
-        );
-        picks = sorted.slice(0, need);
-      }
+    // Fisher–Yates shuffle so different gyms don't all start identically.
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
     }
-    if (!picks) {
-      // Fallback: shuffle so different gyms don't all start identically.
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-      picks = pool.slice(0, need);
-    }
+    const picks = pool.slice(0, need);
     if (!picks.length) return getState(gymId);
 
+    // Resolve titles in parallel (oEmbed, no API key); add sequentially; broadcast once.
     const titled = await Promise.all(
       picks.map(async (id) => ({ id, title: (await fetchTitle(id)) || id }))
     );
@@ -206,32 +224,14 @@ export async function getState(gymId) {
     redis.get(keys.startedAt(gymId)),
   ]);
 
-  // Pull cached recommender scores (no network call here — getState runs hot).
-  // When the cache is empty or the recommender is disabled, recScore = 0 for all.
-  let recScores = {};
-  try {
-    const at = Number((await redis.get(keys.recCacheAt(gymId))) || 0);
-    if (at) recScores = await redis.hgetall(keys.recCache(gymId)) || {};
-  } catch { recScores = {}; }
-
-  let queue = [];
+  const queue = [];
   for (let i = 0; i < flat.length; i += 2) {
     const trackId = flat[i];
     const raw = metaAll[trackId];
-    if (!raw) continue;
+    if (!raw) continue; // skip orphans (e.g. tracks never registered via addTrack)
     const m = JSON.parse(raw);
-    queue.push({
-      trackId,
-      ...m,
-      tally: Number(flat[i + 1]),
-      recScore: Number(recScores[trackId]) || 0,
-    });
+    queue.push({ trackId, ...m, tally: Number(flat[i + 1]) });
   }
-
-  // RE-RANKING SIGNAL (Step 4): vote tally is primary; recommender breaks ties.
-  // Two tracks with the same tally — the one the recommender likes more goes first.
-  // This NEVER overrides the room: a +1 tally always beats a 0, regardless of rec.
-  queue.sort((a, b) => (b.tally - a.tally) || (b.recScore - a.recScore));
 
   const startedAt = startedAtRaw ? Number(startedAtRaw) : null;
   let nowPlaying =
@@ -239,54 +239,29 @@ export async function getState(gymId) {
       ? { trackId: nowId, ...JSON.parse(metaAll[nowId]), startedAt }
       : null;
 
+  // Vote-to-skip progress for the current song (Step 2).
   if (nowPlaying) {
     const skipVotes = await redis.scard(keys.skip(gymId, nowId));
     nowPlaying.skipVotes = skipVotes;
     nowPlaying.skipNeeded = Math.floor(activeUsers.length / 2) + 1;
   }
 
+  // serverNow lets every client align to ONE clock: position = (serverNow - startedAt).
   return { gymId, nowPlaying, queue, activeUsers, serverNow: Date.now() };
 }
 
+/** Broadcast the full snapshot to the gym's room via Redis pub/sub. */
 export async function publishState(gymId) {
   const state = await getState(gymId);
   await redis.publish(keys.channel(gymId), JSON.stringify({ type: "state", ...state }));
 }
 
 /**
- * Background refresh of the recommender cache. Fires every N ms (default 30s)
- * for every gym that has presence — keeps getState() hot-path cheap (cache hit)
- * without hammering the SageMaker endpoint on every state read.
+ * Durability trade-off (documented in docs/consistency.md):
+ * Votes are authoritative in Redis and flushed to Mongo every FLUSH_MS. A crash
+ * between flushes loses up to FLUSH_MS of writes — acceptable for vote tallies,
+ * and it keeps Mongo off the hot path under burst load.
  */
-export function startRecommenderRefresher() {
-  if (!recommenderEnabled()) return () => {};
-  const every = Number(process.env.RECOMMENDER_REFRESH_MS || 30_000);
-
-  const tick = async () => {
-    try {
-      // Find gyms that have an active queue (cheap proxy for "alive").
-      const stream = redis.scanStream({ match: "gym:*:queue", count: 100 });
-      const gymIds = new Set();
-      for await (const batch of stream) {
-        for (const k of batch) {
-          const parts = k.split(":");
-          if (parts.length >= 3) gymIds.add(parts[1]);
-        }
-      }
-      for (const gymId of gymIds) {
-        await recommend({ gymId, n: 50 }).catch(() => {});
-      }
-    } catch (err) {
-      console.error("[rec refresher] error", err);
-    }
-  };
-
-  const timer = setInterval(tick, every);
-  // Kick once at boot so the first state read is already warm.
-  tick().catch(() => {});
-  return () => clearInterval(timer);
-}
-
 export function startFlushWorker() {
   const timer = setInterval(async () => {
     try {

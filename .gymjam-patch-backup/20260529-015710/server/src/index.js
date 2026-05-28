@@ -7,16 +7,14 @@ import { dirname, join } from "node:path";
 import { networkInterfaces } from "node:os";
 import QRCode from "qrcode";
 import { connectMongo } from "./mongo.js";
-import { redis, subscriber, keys } from "./redis.js";
+import { subscriber, keys } from "./redis.js";
 import {
   castVote, getTally, startFlushWorker,
   addTrack, advance, getState, publishState,
   voteSkip, maybeSkip, autofill,
-  startRecommenderRefresher,
 } from "./votes.js";
 import { heartbeat, leave, startPresenceSweeper } from "./presence.js";
 import { parseVideoId, fetchTitle, search, searchEnabled } from "./youtube.js";
-import { recommend, recommenderEnabled } from "./recommender.js";
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -25,11 +23,8 @@ app.use(express.json());
 // --- Health check (ALB target-group probe hits this) ---------------------------
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
-// Tells the UI which optional features are available.
-app.get("/api/config", (_req, res) => res.json({
-  searchEnabled: searchEnabled(),
-  recommenderEnabled: recommenderEnabled(),
-}));
+// Tells the UI whether type-to-search is available (needs YOUTUBE_API_KEY).
+app.get("/api/config", (_req, res) => res.json({ searchEnabled: searchEnabled() }));
 
 // --- Static voting page (served same-origin, so no CORS) ------------------------
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,90 +36,62 @@ app.get("/api/gyms/:gymId/state", async (req, res) => {
 });
 
 // --- Figure out the URL phones should actually open --------------------------
-// Priority order (top wins):
-//   1. Per-gym override the operator typed into the UI (Redis: gym:<g>:publicUrl)
-//   2. PUBLIC_URL env var (set at deploy)
-//   3. The Host header the screen used — IF it's reachable from a phone
-//      (i.e. NOT localhost and NOT a Docker bridge IP)
-//   4. OS-detected LAN IP (with Docker-bridge ranges filtered out)
-//   5. localhost (last resort)
-//
-// The fix: 172.16.0.0/12 is Docker's default bridge range. When the floor screen
-// reaches the API through that range (or when the API is inside a container and
-// only sees its own eth0), we MUST fall through to the LAN IP — never hand a
-// phone a 172.x address.
-function isDockerInternal(host) {
-  if (!host) return false;
-  const m = host.match(/^172\.(\d{1,3})\./);
-  if (!m) return false;
-  const n = Number(m[1]);
-  return n >= 16 && n <= 31;
-}
-
-function isLocalHost(host) {
-  return !host || ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(host);
-}
-
+// Priority: explicit PUBLIC_URL (prod) > the Host the screen used (if it's a
+// real address) > the box's detected LAN IP (so a screen opened on localhost
+// still hands phones a scannable address).
 function lanIp() {
   const ifaces = networkInterfaces();
+
   for (const [name, list] of Object.entries(ifaces)) {
+    // Skip docker/virtual interfaces
     if (
       name.includes("docker") ||
       name.includes("br-") ||
       name.includes("veth") ||
       name.includes("utun")
-    ) continue;
+    ) {
+      continue;
+    }
 
     for (const ni of list || []) {
       if (ni.family !== "IPv4" || ni.internal) continue;
-      if (isDockerInternal(ni.address)) continue;        // skip 172.16-31.x
-      if (ni.address.startsWith("169.254.")) continue;   // skip link-local
-      if (ni.address.startsWith("192.168.")) return ni.address;
-      if (ni.address.startsWith("10.")) return ni.address;
+
+      // Prefer 192.168.x.x
+      if (ni.address.startsWith("192.168.")) {
+        return ni.address;
+      }
+
+      // Then prefer 10.x.x.x
+      if (ni.address.startsWith("10.")) {
+        return ni.address;
+      }
     }
   }
+
   return "localhost";
 }
 
-async function readPublicUrl(gymId) {
-  try {
-    const v = await redis.get(keys.publicUrl(gymId));
-    return v || null;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveBase(req, gymId) {
-  // 1. Per-gym operator-set URL — the user knows their network, they win.
-  if (gymId) {
-    const stored = await readPublicUrl(gymId);
-    if (stored) return stored.replace(/\/+$/, "");
-  }
-  // 2. Deploy-time env override.
+function resolveBase(req) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, "");
-  // 3. Trust the Host header only if it's reachable from a phone.
   const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
   const hostHeader = req.headers["x-forwarded-host"] || req.headers.host || "";
   const [hostname, port] = hostHeader.split(":");
-  if (!isLocalHost(hostname) && !isDockerInternal(hostname)) {
-    return `${proto}://${hostHeader}`;
+  const isLocal = !hostname || ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname);
+  if (isLocal) {
+    const p = port || process.env.PORT || PORT;
+    return `${proto}://${lanIp()}:${p}`;
   }
-  // 4 & 5: OS LAN IP, falling back to localhost.
-  const p = port || process.env.PORT || PORT;
-  return `${proto}://${lanIp()}:${p}`;
+  return `${proto}://${hostHeader}`;
 }
 
-async function joinUrl(req, gymId) {
-  const base = await resolveBase(req, gymId);
-  return `${base}/?gym=${encodeURIComponent(gymId)}`;
+function joinUrl(req, gymId) {
+  return `${resolveBase(req)}/?gym=${encodeURIComponent(gymId)}`;
 }
 
 // --- QR code so anyone on the same network can join the floor -------------------
 app.get("/api/gyms/:gymId/qr.svg", async (req, res) => {
   try {
-    const url = await joinUrl(req, req.params.gymId);
-    const svg = await QRCode.toString(url, {
+    const svg = await QRCode.toString(joinUrl(req, req.params.gymId), {
       type: "svg", margin: 1, errorCorrectionLevel: "M",
       color: { dark: "#0a0a0b", light: "#ffffff" },
     });
@@ -135,39 +102,8 @@ app.get("/api/gyms/:gymId/qr.svg", async (req, res) => {
 });
 
 // --- The exact URL the QR encodes (UI shows it as text so you can verify the IP) -
-app.get("/api/gyms/:gymId/join", async (req, res) => {
-  const url = await joinUrl(req, req.params.gymId);
-  const override = await readPublicUrl(req.params.gymId);
-  res.json({ url, lan: lanIp(), override: override || null });
-});
-
-// --- Operator overrides the public URL (top priority). Lightly validated. -------
-app.put("/api/gyms/:gymId/public-url", async (req, res) => {
-  try {
-    let { url } = req.body || {};
-    if (typeof url !== "string") return res.status(400).json({ error: "url (string) required" });
-    url = url.trim().replace(/\/+$/, "");
-    if (!url) {
-      await redis.del(keys.publicUrl(req.params.gymId));
-      return res.json({ url: null });
-    }
-    // Accept "http(s)://host[:port][/path]" or bare "host[:port]" (we add http://).
-    if (!/^https?:\/\//i.test(url)) url = "http://" + url;
-    let parsed;
-    try { parsed = new URL(url); } catch { return res.status(400).json({ error: "invalid URL" }); }
-    if (!parsed.hostname) return res.status(400).json({ error: "invalid host" });
-    // Strip the trailing slash + any query/hash — we only want the base.
-    const clean = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}`;
-    await redis.set(keys.publicUrl(req.params.gymId), clean);
-    res.json({ url: clean });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete("/api/gyms/:gymId/public-url", async (req, res) => {
-  await redis.del(keys.publicUrl(req.params.gymId));
-  res.json({ url: null });
+app.get("/api/gyms/:gymId/join", (req, res) => {
+  res.json({ url: joinUrl(req, req.params.gymId), lan: lanIp() });
 });
 
 // --- Add a song (anyone with a YouTube link or, if enabled, a search) ----------
@@ -197,6 +133,7 @@ app.post("/api/gyms/:gymId/advance", async (req, res) => {
 });
 
 // --- Vote to skip the current track (majority of the active room skips it) ------
+// Header: Idempotency-Key. Body: { memberId }. Skips when votes > activeUsers/2.
 app.post("/api/gyms/:gymId/skip", async (req, res) => {
   try {
     const { memberId } = req.body;
@@ -217,18 +154,6 @@ app.post("/api/gyms/:gymId/autofill", async (req, res) => {
   }
 });
 
-// --- ML recommender: top-N picks for this gym (handy to inspect the signal). ----
-// Returns null when the recommender is disabled — the UI hides the panel.
-app.get("/api/gyms/:gymId/recommend", async (req, res) => {
-  try {
-    const n = Math.max(1, Math.min(50, Number(req.query.n) || 10));
-    const recs = await recommend({ gymId: req.params.gymId, n });
-    res.json({ enabled: recommenderEnabled(), recs });
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
 // --- Optional: type-to-search (only if YOUTUBE_API_KEY is set) ------------------
 app.get("/api/youtube/search", async (req, res) => {
   try {
@@ -241,6 +166,7 @@ app.get("/api/youtube/search", async (req, res) => {
 });
 
 // --- Cast / change a vote ------------------------------------------------------
+// Header: Idempotency-Key (client UUID per action). Body: { memberId, direction }.
 app.post("/api/gyms/:gymId/tracks/:trackId/vote", async (req, res) => {
   try {
     const { gymId, trackId } = req.params;
@@ -263,7 +189,7 @@ app.get("/api/gyms/:gymId/tracks/:trackId/tally", async (req, res) => {
 // --- WebSocket room: any task can serve any client (stateless, pub/sub fan-out) -
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
-const rooms = new Map();
+const rooms = new Map(); // gymId -> Set<ws>
 
 wss.on("connection", (ws, req) => {
   const gymId = new URL(req.url, "http://x").searchParams.get("gym");
@@ -271,14 +197,22 @@ wss.on("connection", (ws, req) => {
   ws.gymId = gymId;
   if (!rooms.has(gymId)) rooms.set(gymId, new Set());
   rooms.get(gymId).add(ws);
+  // Send a snapshot immediately so a fresh client renders without waiting for an event.
   getState(gymId).then((s) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "state", ...s }));
   }).catch(() => {});
+  // Auto-queue: keep the floor from being empty by topping up to ~10 tracks.
+  // autofill is locked + idempotent, so concurrent connects won't double-seed.
   autofill({ gymId }).catch(() => {});
 
+  // Presence: the client says "hello" with its name on connect, then sends a
+  // periodic "heartbeat". Both refresh lastSeen; we only re-broadcast when the
+  // active set actually changes (a brand-new member or a returning timed-out one).
   ws.on("message", async (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
+    // NTP-style clock sync: echo the client's t0 back with the server's clock so
+    // the client can compute offset (and discount round-trip latency) for sync.
     if (msg.type === "time") {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "time", t0: msg.t0, t1: Date.now() }));
       return;
@@ -298,12 +232,16 @@ wss.on("connection", (ws, req) => {
     if (ws.memberId) {
       try {
         await leave(gymId, ws.memberId);
+        // A smaller room lowers the skip bar — an existing set of skip votes may
+        // now be a majority. Re-check; if it doesn't skip, just broadcast.
         if (!(await maybeSkip(gymId))) await publishState(gymId);
       } catch {}
     }
   });
 });
 
+// One subscriber connection fans out Redis messages to local WS clients. Run N
+// API tasks and any of them can serve any client — no sticky sessions needed.
 subscriber.psubscribe("gym:*");
 subscriber.on("pmessage", (_pattern, channel, message) => {
   const gymId = channel.slice("gym:".length);
@@ -313,11 +251,12 @@ subscriber.on("pmessage", (_pattern, channel, message) => {
 });
 
 const stop = startFlushWorker();
+// On timeout-driven presence changes, re-check skip (smaller room → lower bar),
+// then broadcast. maybeSkip already broadcasts when it skips.
 const stopPresence = startPresenceSweeper(async (gymId) => {
   if (!(await maybeSkip(gymId))) await publishState(gymId);
 });
-const stopRec = startRecommenderRefresher();
 await connectMongo();
 server.listen(PORT, () => console.log(`GymJam API on :${PORT}`));
 
-process.on("SIGTERM", () => { stop(); stopPresence(); stopRec(); server.close(); });
+process.on("SIGTERM", () => { stop(); stopPresence(); server.close(); });

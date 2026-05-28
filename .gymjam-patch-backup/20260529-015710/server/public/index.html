@@ -62,35 +62,6 @@
   .qrcard small { color: var(--dim); font-size: 11px; font-family: "IBM Plex Mono", monospace; text-align: center; line-height: 1.5; }
   .qrcard small b { color: var(--text); }
   .qrcard .joinurl { color: var(--accent); word-break: break-all; }
-  .qrcard .joinurl.override { color: #ffc857; }
-  .qrcard .qrEditBtn {
-    border: 1px solid var(--line); background: transparent; color: var(--dim);
-    font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: .14em;
-    padding: 3px 8px; border-radius: 999px; cursor: pointer; text-transform: uppercase;
-    transition: color .15s, border-color .15s;
-  }
-  .qrcard .qrEditBtn:hover { color: var(--text); border-color: var(--text); }
-  .qrcard .qrEditBtn.active { color: var(--accent); border-color: var(--accent); }
-  .qrEdit { display: none; flex-direction: column; gap: 8px; width: 100%; }
-  .qrEdit.show { display: flex; }
-  .qrEdit input {
-    background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--text);
-    border-radius: 8px; padding: 8px 10px; font-family: "IBM Plex Mono", monospace;
-    font-size: 12px; outline: none;
-  }
-  .qrEdit input:focus { border-color: var(--accent); }
-  .qrEdit .row { display: flex; gap: 6px; }
-  .qrEdit button {
-    flex: 1; border: 0; background: var(--accent); color: #0a0a0b;
-    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600;
-    padding: 7px 10px; border-radius: 8px; cursor: pointer; letter-spacing: .08em; text-transform: uppercase;
-  }
-  .qrEdit button.secondary {
-    background: transparent; color: var(--dim); border: 1px solid var(--line);
-  }
-  .qrEdit button.secondary:hover { color: var(--text); border-color: var(--text); }
-  .qrEdit .hint { color: var(--dim); font-size: 10px; font-family: "IBM Plex Mono", monospace; text-align: left; line-height: 1.5; }
-  .qrEdit .err { color: var(--down); font-size: 10px; font-family: "IBM Plex Mono", monospace; min-height: 12px; }
   /* active users */
   .users { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
   .user {
@@ -270,19 +241,10 @@
     <!-- LEFT SIDEBAR: scan-to-join + active users -->
     <aside class="sidebar">
       <div class="panel qrcard">
-        <h3>Scan to join <button class="qrEditBtn" id="qrEditBtn" type="button">Edit</button></h3>
+        <h3>Scan to join</h3>
         <div class="qrbox"><img id="qr" alt="Scan to join this gym" /></div>
         <small>Same Wi-Fi? Scan to vote on <b id="qrGym">—</b></small>
         <small class="joinurl" id="joinUrl">resolving address…</small>
-        <div class="qrEdit" id="qrEdit">
-          <div class="hint">Wrong IP showing? Paste the URL your phone actually reaches — e.g. <b>http://192.168.1.45:3000</b>. Your URL beats anything we auto-detect.</div>
-          <input id="qrEditInput" placeholder="http://192.168.x.x:3000" spellcheck="false" autocapitalize="none" autocomplete="off" />
-          <div class="row">
-            <button id="qrEditSave" type="button">Save</button>
-            <button id="qrEditClear" type="button" class="secondary">Reset</button>
-          </div>
-          <div class="err" id="qrEditErr"></div>
-        </div>
       </div>
       <div class="panel">
         <h3>On the floor <span class="count" id="userCount">0</span></h3>
@@ -690,78 +652,19 @@
     };
   }
 
-  // Show the exact address the QR encodes, plus expose an edit panel so the
-  // floor operator can paste the real LAN URL when auto-detect picks a Docker
-  // internal IP (172.x) or otherwise gets it wrong. The user-set URL wins.
+  // Show the exact address the QR encodes, so you can confirm the IP is reachable.
   async function loadJoinUrl() {
     try {
-      const data = await api(`/api/gyms/${encodeURIComponent(GYM)}/join`);
+      const { url } = await api(`/api/gyms/${encodeURIComponent(GYM)}/join`);
       const a = document.getElementById("joinUrl");
-      if (a) {
-        a.textContent = data.url;
-        a.classList.toggle("override", Boolean(data.override));
-      }
-      const input = document.getElementById("qrEditInput");
-      if (input && !input.matches(":focus")) input.value = data.override || "";
-      const btn = document.getElementById("qrEditBtn");
-      if (btn) btn.classList.toggle("active", Boolean(data.override));
+      if (a) a.textContent = url;
     } catch {}
-  }
-
-  function refreshQr() {
-    // Bust the SVG cache so the QR redraws after a URL change.
-    $("qr").src = `/api/gyms/${encodeURIComponent(GYM)}/qr.svg?t=${Date.now()}`;
-  }
-
-  function wireQrEdit() {
-    const btn = document.getElementById("qrEditBtn");
-    const panel = document.getElementById("qrEdit");
-    const input = document.getElementById("qrEditInput");
-    const save = document.getElementById("qrEditSave");
-    const clear = document.getElementById("qrEditClear");
-    const err = document.getElementById("qrEditErr");
-    if (!btn || !panel) return;
-
-    btn.addEventListener("click", () => {
-      panel.classList.toggle("show");
-      if (panel.classList.contains("show")) setTimeout(() => input?.focus(), 30);
-    });
-
-    save?.addEventListener("click", async () => {
-      err.textContent = "";
-      const url = (input.value || "").trim();
-      if (!url) { err.textContent = "Enter a URL (or hit Reset)."; return; }
-      try {
-        const res = await fetch(`/api/gyms/${encodeURIComponent(GYM)}/public-url`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        const data = await res.json();
-        if (!res.ok) { err.textContent = data.error || "Could not save."; return; }
-        refreshQr();
-        await loadJoinUrl();
-      } catch (e) { err.textContent = e.message; }
-    });
-
-    clear?.addEventListener("click", async () => {
-      err.textContent = "";
-      try {
-        await fetch(`/api/gyms/${encodeURIComponent(GYM)}/public-url`, { method: "DELETE" });
-        input.value = "";
-        refreshQr();
-        await loadJoinUrl();
-      } catch (e) { err.textContent = e.message; }
-    });
-
-    input?.addEventListener("keydown", (e) => { if (e.key === "Enter") save?.click(); });
   }
 
   // ---- Boot ----
   (async () => {
     try { searchEnabled = (await api("/api/config")).searchEnabled; } catch {}
     if (searchEnabled) $("newtrack").placeholder = "Paste a YouTube link, or search…";
-    wireQrEdit();
     loadJoinUrl();
     try { state = await api(`/api/gyms/${GYM}/state`); } catch {}
     render();

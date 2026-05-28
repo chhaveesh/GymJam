@@ -36,7 +36,3 @@ jobs:
       - name: Concurrency / idempotency invariants
         working-directory: server
         run: node test/concurrency.js
-
-      - name: Recommender client invariants (Step 4)
-        working-directory: server
-        run: node test/recommender.js

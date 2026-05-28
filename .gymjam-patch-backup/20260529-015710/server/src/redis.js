@@ -26,21 +26,16 @@ export const keys = {
   dirty:  ()          => `dirty:tallies`,
   channel:(g)         => `gym:${g}`,
   // --- jukebox additions ---
-  queue:  (g)         => `gym:${g}:queue`,
-  meta:   (g)         => `gym:${g}:meta`,
-  now:    (g)         => `gym:${g}:now`,
+  queue:  (g)         => `gym:${g}:queue`,   // zset: member=trackId, score=tally
+  meta:   (g)         => `gym:${g}:meta`,    // hash: field=trackId -> JSON {videoId,title,addedBy,addedAt}
+  now:    (g)         => `gym:${g}:now`,     // string: trackId currently playing on the floor
   // --- presence additions (Step 1) ---
-  presence:(g)        => `gym:${g}:presence`,
-  names:   (g)        => `gym:${g}:names`,
+  presence:(g)        => `gym:${g}:presence`,// zset: member=memberId, score=lastSeen(ms)
+  names:   (g)        => `gym:${g}:names`,    // hash: field=memberId -> display name
   // --- synced playback additions (Step 1.5) ---
-  startedAt:(g)       => `gym:${g}:startedAt`,
-  advLock: (g, t)     => `gym:${g}:adv:${t}`,
+  startedAt:(g)       => `gym:${g}:startedAt`,// string: ms epoch when the current track started (server clock)
+  advLock: (g, t)     => `gym:${g}:adv:${t}`, // short-lived lock so N "ended" reports promote the next song once
   // --- vote-to-skip + auto-queue (Steps 2 & 3) ---
-  skip:    (g, t)     => `gym:${g}:skip:${t}`,
-  seedLock:(g)        => `gym:${g}:seeding`,
-  // --- operator-set public URL (top-priority join URL) ---
-  publicUrl:(g)       => `gym:${g}:publicUrl`,
-  // --- ML re-ranker cache (Step 4) ---
-  recCache:(g)        => `gym:${g}:rec`,           // hash: trackId -> rec score
-  recCacheAt:(g)      => `gym:${g}:rec:at`,        // string: ms epoch of last refresh
+  skip:    (g, t)     => `gym:${g}:skip:${t}`,// set: memberIds who voted to skip the current track t
+  seedLock:(g)        => `gym:${g}:seeding`,  // lock so concurrent auto-fills don't double-seed a gym
 };

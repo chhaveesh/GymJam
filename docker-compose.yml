@@ -6,7 +6,22 @@ services:
       - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://mongo:27017
       - PORT=3000
-    depends_on: [redis, mongo]
+      # Step 4: point the API at the local recommender container.
+      # Comment out (or set empty) to fall back to vote-only ordering.
+      - RECOMMENDER_URL=http://recommender:8080
+    depends_on: [redis, mongo, recommender]
+
+  recommender:
+    build: ./ml
+    ports: ["8090:8080"]
+    # The model artifact is baked into the image at build time, so the
+    # container starts ready to serve. See ml/Dockerfile + ml/README.md.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/ping').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
 
   redis:
     image: redis:7-alpine
