@@ -32,4 +32,7 @@ export const keys = {
   // --- presence additions (Step 1) ---
   presence:(g)        => `gym:${g}:presence`,// zset: member=memberId, score=lastSeen(ms)
   names:   (g)        => `gym:${g}:names`,    // hash: field=memberId -> display name
+  // --- synced playback additions (Step 1.5) ---
+  startedAt:(g)       => `gym:${g}:startedAt`,// string: ms epoch when the current track started (server clock)
+  advLock: (g, t)     => `gym:${g}:adv:${t}`, // short-lived lock so N "ended" reports promote the next song once
 };

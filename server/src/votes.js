@@ -58,7 +58,9 @@ export async function addTrack({ gymId, videoId, title, addedBy }) {
   });
   await redis.hset(keys.meta(gymId), trackId, meta);
   await redis.zadd(keys.queue(gymId), "NX", 0, trackId);
-  await redis.set(keys.now(gymId), trackId, "NX"); // only if nothing playing yet
+  // Only if nothing is playing yet: this becomes now-playing AND starts the clock.
+  const became = await redis.set(keys.now(gymId), trackId, "NX");
+  if (became) await redis.set(keys.startedAt(gymId), String(Date.now()));
   await publishState(gymId);
   return getState(gymId);
 }
@@ -66,7 +68,9 @@ export async function addTrack({ gymId, videoId, title, addedBy }) {
 /**
  * The floor finished a track. Drop it from the queue and promote the next
  * highest-voted song to "now playing". Guarded so a stale/duplicate "ended"
- * event from one screen can't skip a song that's actually still playing.
+ * event from one screen can't skip a song that's actually still playing — and,
+ * now that EVERY screen plays, so N simultaneous "ended" reports promote the
+ * next song exactly once (a short Redis lock per finished track).
  */
 export async function advance({ gymId, finishedId }) {
   const current = await redis.get(keys.now(gymId));
@@ -74,11 +78,22 @@ export async function advance({ gymId, finishedId }) {
     return getState(gymId); // stale event — ignore, don't skip the live song
   }
   const toRemove = finishedId || current;
-  if (toRemove) await removeTrack(gymId, toRemove);
+  if (toRemove) {
+    // First "ended" report wins the lock and performs the promotion; the rest
+    // (from other screens) see the lock held and bail out as no-ops.
+    const won = await redis.set(keys.advLock(gymId, toRemove), "1", "NX", "EX", 5);
+    if (!won) return getState(gymId);
+    await removeTrack(gymId, toRemove);
+  }
 
   const [nextId] = await redis.zrevrange(keys.queue(gymId), 0, 0);
-  if (nextId) await redis.set(keys.now(gymId), nextId);
-  else await redis.del(keys.now(gymId));
+  if (nextId) {
+    await redis.set(keys.now(gymId), nextId);
+    await redis.set(keys.startedAt(gymId), String(Date.now())); // restart the shared clock
+  } else {
+    await redis.del(keys.now(gymId));
+    await redis.del(keys.startedAt(gymId));
+  }
 
   await publishState(gymId);
   return getState(gymId);
@@ -99,11 +114,12 @@ async function removeTrack(gymId, trackId) {
 
 /** Full room snapshot: what's playing + the queue ordered by votes (desc) + who's here. */
 export async function getState(gymId) {
-  const [nowId, flat, metaAll, activeUsers] = await Promise.all([
+  const [nowId, flat, metaAll, activeUsers, startedAtRaw] = await Promise.all([
     redis.get(keys.now(gymId)),
     redis.zrevrange(keys.queue(gymId), 0, -1, "WITHSCORES"),
     redis.hgetall(keys.meta(gymId)),
     getActiveUsers(gymId),
+    redis.get(keys.startedAt(gymId)),
   ]);
 
   const queue = [];
@@ -115,10 +131,14 @@ export async function getState(gymId) {
     queue.push({ trackId, ...m, tally: Number(flat[i + 1]) });
   }
 
+  const startedAt = startedAtRaw ? Number(startedAtRaw) : null;
   const nowPlaying =
-    nowId && metaAll[nowId] ? { trackId: nowId, ...JSON.parse(metaAll[nowId]) } : null;
+    nowId && metaAll[nowId]
+      ? { trackId: nowId, ...JSON.parse(metaAll[nowId]), startedAt }
+      : null;
 
-  return { gymId, nowPlaying, queue, activeUsers };
+  // serverNow lets every client align to ONE clock: position = (serverNow - startedAt).
+  return { gymId, nowPlaying, queue, activeUsers, serverNow: Date.now() };
 }
 
 /** Broadcast the full snapshot to the gym's room via Redis pub/sub. */

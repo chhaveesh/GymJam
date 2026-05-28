@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { networkInterfaces } from "node:os";
 import QRCode from "qrcode";
 import { connectMongo } from "./mongo.js";
 import { subscriber, keys } from "./redis.js";
@@ -33,15 +34,46 @@ app.get("/api/gyms/:gymId/state", async (req, res) => {
   res.json(await getState(req.params.gymId));
 });
 
+// --- Figure out the URL phones should actually open --------------------------
+// Priority: explicit PUBLIC_URL (prod) > the Host the screen used (if it's a
+// real address) > the box's detected LAN IP (so a screen opened on localhost
+// still hands phones a scannable address).
+function lanIp() {
+  const ifaces = networkInterfaces();
+  const candidates = [];
+  for (const list of Object.values(ifaces)) {
+    for (const ni of list || []) {
+      if (ni.family !== "IPv4" || ni.internal) continue;
+      candidates.push(ni.address);
+    }
+  }
+  // Prefer common private LAN ranges, else the first non-internal IPv4.
+  const priv = candidates.find((a) =>
+    /^192\.168\./.test(a) || /^10\./.test(a) || /^172\.(1[6-9]|2\d|3[01])\./.test(a));
+  return priv || candidates[0] || "localhost";
+}
+
+function resolveBase(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, "");
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+  const hostHeader = req.headers["x-forwarded-host"] || req.headers.host || "";
+  const [hostname, port] = hostHeader.split(":");
+  const isLocal = !hostname || ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname);
+  if (isLocal) {
+    const p = port || process.env.PORT || PORT;
+    return `${proto}://${lanIp()}:${p}`;
+  }
+  return `${proto}://${hostHeader}`;
+}
+
+function joinUrl(req, gymId) {
+  return `${resolveBase(req)}/?gym=${encodeURIComponent(gymId)}`;
+}
+
 // --- QR code so anyone on the same network can join the floor -------------------
-// Encodes the floor URL using the Host the screen reached us on (the LAN IP),
-// which is exactly the address other phones on the network should open.
 app.get("/api/gyms/:gymId/qr.svg", async (req, res) => {
   try {
-    const proto = req.headers["x-forwarded-proto"] || req.protocol;
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const joinUrl = `${proto}://${host}/?gym=${encodeURIComponent(req.params.gymId)}`;
-    const svg = await QRCode.toString(joinUrl, {
+    const svg = await QRCode.toString(joinUrl(req, req.params.gymId), {
       type: "svg", margin: 1, errorCorrectionLevel: "M",
       color: { dark: "#0a0a0b", light: "#ffffff" },
     });
@@ -49,6 +81,11 @@ app.get("/api/gyms/:gymId/qr.svg", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- The exact URL the QR encodes (UI shows it as text so you can verify the IP) -
+app.get("/api/gyms/:gymId/join", (req, res) => {
+  res.json({ url: joinUrl(req, req.params.gymId), lan: lanIp() });
 });
 
 // --- Add a song (anyone with a YouTube link or, if enabled, a search) ----------
@@ -131,6 +168,12 @@ wss.on("connection", (ws, req) => {
   ws.on("message", async (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
+    // NTP-style clock sync: echo the client's t0 back with the server's clock so
+    // the client can compute offset (and discount round-trip latency) for sync.
+    if (msg.type === "time") {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "time", t0: msg.t0, t1: Date.now() }));
+      return;
+    }
     if (msg.type === "hello" || msg.type === "heartbeat") {
       if (!msg.memberId) return;
       ws.memberId = msg.memberId;
