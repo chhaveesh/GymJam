@@ -1,0 +1,27 @@
+import Redis from "ioredis";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+
+// One connection for commands, a second dedicated to pub/sub (Redis requires
+// subscribers to be on a connection that isn't issuing normal commands).
+export const redis = new Redis(REDIS_URL);
+export const subscriber = new Redis(REDIS_URL);
+
+// Register the Lua script as a custom command. ioredis SCRIPT LOADs it once and
+// uses EVALSHA after that, so the script body isn't shipped on every call.
+redis.defineCommand("castVote", {
+  numberOfKeys: 4,
+  lua: readFileSync(join(__dirname, "vote.lua"), "utf8"),
+});
+
+export const keys = {
+  tally:  (g, t)      => `gym:${g}:track:${t}:tally`,
+  member: (g, t, m)   => `gym:${g}:track:${t}:m:${m}`,
+  idem:   (id)        => `idem:${id}`,
+  dirty:  ()          => `dirty:tallies`,
+  channel:(g)         => `gym:${g}`,
+};

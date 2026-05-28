@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GymJam — live floor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --panel: #141417;
+    --line: #26262b;
+    --text: #f4f4f2;
+    --dim: #85858d;
+    --accent: #c6ff3a;   /* acid lime */
+    --down: #ff5470;     /* coral */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 80% -10%, rgba(198,255,58,.10), transparent 60%),
+      radial-gradient(700px 500px at -10% 110%, rgba(255,84,112,.08), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Archivo", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 620px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .mark {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 46px; letter-spacing: 2px; line-height: .9;
+  }
+  .mark b { color: var(--accent); }
+  .sub { color: var(--dim); font-size: 13px; font-weight: 500; }
+
+  .bar {
+    display: flex; align-items: center; gap: 10px; margin: 22px 0 8px;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(255,255,255,.02);
+  }
+  .bar label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+  .bar input {
+    flex: 1; background: transparent; border: 0; color: var(--text);
+    font-family: "IBM Plex Mono", monospace; font-size: 14px; outline: none;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--down); box-shadow: 0 0 0 0 rgba(198,255,58,.5); }
+  .dot.live { background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(198,255,58,.45)} 70%{box-shadow:0 0 0 8px rgba(198,255,58,0)} 100%{box-shadow:0 0 0 0 rgba(198,255,58,0)} }
+
+  .hint { color: var(--dim); font-size: 12.5px; margin: 4px 2px 22px; }
+  .hint b { color: var(--text); font-weight: 700; }
+
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .card {
+    display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 14px;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+    will-change: transform;
+    animation: rise .45s both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+  .card.flash { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(198,255,58,.12); }
+  .rank { font-family: "IBM Plex Mono", monospace; color: var(--dim); font-size: 14px; text-align: center; }
+  .title { font-family: "Bebas Neue", sans-serif; font-size: 25px; letter-spacing: 1px; line-height: 1; }
+  .meta { color: var(--dim); font-size: 11.5px; font-family: "IBM Plex Mono", monospace; margin-top: 3px; }
+
+  .vote { display: flex; align-items: center; gap: 10px; }
+  .tally { font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 600; min-width: 44px; text-align: right; }
+  button.v {
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--line); background: rgba(255,255,255,.03); color: var(--text);
+    font-size: 18px; line-height: 1; transition: transform .08s, background .15s, border-color .15s;
+  }
+  button.v:active { transform: scale(.9); }
+  button.v.up.active { border-color: var(--accent); color: var(--accent); background: rgba(198,255,58,.12); }
+  button.v.down.active { border-color: var(--down); color: var(--down); background: rgba(255,84,112,.12); }
+
+  .add { display: flex; gap: 8px; margin-top: 18px; }
+  .add input {
+    flex: 1; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.02); color: var(--text); font-family: "Archivo"; font-size: 14px; outline: none;
+  }
+  .add input:focus { border-color: var(--accent); }
+  .add button {
+    padding: 0 18px; border-radius: 11px; cursor: pointer; border: 0;
+    background: var(--accent); color: #0a0a0b; font-weight: 700; font-family: "Archivo"; letter-spacing: .02em;
+  }
+  footer { margin-top: 34px; color: var(--dim); font-size: 11.5px; font-family: "IBM Plex Mono", monospace; }
+  footer span { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="mark">GYM<b>JAM</b></div>
+      <div class="sub">the room picks the queue</div>
+    </header>
+
+    <div class="bar">
+      <label for="gym">gym</label>
+      <input id="gym" value="demo-gym" spellcheck="false" />
+      <span id="dot" class="dot" title="connection"></span>
+    </div>
+    <div class="hint">Open this page in a <b>second tab</b> and vote — watch tallies update live across both. Highest tally floats to the top.</div>
+
+    <ul id="list"></ul>
+
+    <div class="add">
+      <input id="newtrack" placeholder="Add a track…" maxlength="40" />
+      <button id="addbtn">Add</button>
+    </div>
+
+    <footer>member <span id="me"></span> · realtime via redis pub/sub → websocket</footer>
+  </div>
+
+<script>
+  const list = document.getElementById('list');
+  const gymInput = document.getElementById('gym');
+  const dot = document.getElementById('dot');
+  const memberId = 'm-' + Math.random().toString(36).slice(2, 8);
+  document.getElementById('me').textContent = memberId;
+
+  const tracks = new Map();        // id -> { title, tally }
+  const myVote = new Map();        // id -> 'up' | 'down'
+  let gym = gymInput.value.trim();
+  let ws;
+
+  const apiBase = (id, p = '') =>
+    `/api/gyms/${encodeURIComponent(gym)}/tracks/${encodeURIComponent(id)}${p}`;
+
+  function seed() {
+    tracks.clear(); myVote.clear();
+    [
+      ['t-warmup',   'Warmup Pulse'],
+      ['t-heavy',    'Heavy Sets'],
+      ['t-sprint',   'Sprint Interval'],
+      ['t-cooldown', 'Cooldown Flow'],
+    ].forEach(([id, title]) => tracks.set(id, { title, tally: 0 }));
+  }
+
+  function cardEl(id, t, i) {
+    const li = document.createElement('li');
+    li.className = 'card';
+    li.dataset.id = id;
+    li.style.animationDelay = (i * 45) + 'ms';
+    li.innerHTML = `
+      <div class="rank">${String(i + 1).padStart(2, '0')}</div>
+      <div>
+        <div class="title"></div>
+        <div class="meta">${id}</div>
+      </div>
+      <div class="vote">
+        <button class="v down" title="downvote">▼</button>
+        <span class="tally">${t.tally}</span>
+        <button class="v up" title="upvote">▲</button>
+      </div>`;
+    li.querySelector('.title').textContent = t.title;
+    const up = li.querySelector('.up'), down = li.querySelector('.down');
+    if (myVote.get(id) === 'up') up.classList.add('active');
+    if (myVote.get(id) === 'down') down.classList.add('active');
+    up.addEventListener('click', () => castVote(id, 'up'));
+    down.addEventListener('click', () => castVote(id, 'down'));
+    return li;
+  }
+
+  function render() {
+    // FLIP: capture positions, re-render sorted, animate the delta.
+    const prev = new Map();
+    list.querySelectorAll('[data-id]').forEach(el => prev.set(el.dataset.id, el.getBoundingClientRect().top));
+
+    const sorted = [...tracks.entries()].sort(
+      (a, b) => b[1].tally - a[1].tally || a[1].title.localeCompare(b[1].title)
+    );
+    list.innerHTML = '';
+    sorted.forEach(([id, t], i) => list.appendChild(cardEl(id, t, i)));
+
+    list.querySelectorAll('[data-id]').forEach(el => {
+      const old = prev.get(el.dataset.id);
+      if (old == null) return;
+      const delta = old - el.getBoundingClientRect().top;
+      if (!delta) return;
+      el.style.transition = 'transform 0s';
+      el.style.transform = `translateY(${delta}px)`;
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform .35s cubic-bezier(.2,.7,.2,1)';
+        el.style.transform = '';
+      });
+    });
+  }
+
+  function setTally(id, tally, flash) {
+    const t = tracks.get(id);
+    if (!t) return;
+    const changed = t.tally !== tally;
+    t.tally = tally;
+    render();
+    if (flash && changed) {
+      const el = list.querySelector(`[data-id="${CSS.escape(id)}"]`);
+      if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 600); }
+    }
+  }
+
+  async function castVote(id, dir) {
+    myVote.set(id, dir);
+    render();
+    try {
+      const r = await fetch(apiBase(id, '/vote'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({ memberId, direction: dir }),
+      });
+      const d = await r.json();
+      if (typeof d.tally === 'number') setTally(id, d.tally, true); // WS will echo to other tabs
+    } catch (e) {
+      console.error('vote failed', e);
+    }
+  }
+
+  async function loadInitial() {
+    await Promise.all([...tracks.keys()].map(async id => {
+      try {
+        const r = await fetch(apiBase(id, '/tally'));
+        const d = await r.json();
+        if (typeof d.tally === 'number') tracks.get(id).tally = d.tally;
+      } catch (e) { /* server not up yet */ }
+    }));
+    render();
+  }
+
+  function connectWS() {
+    if (ws) { try { ws.close(); } catch (e) {} }
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}?gym=${encodeURIComponent(gym)}`);
+    ws.onopen = () => dot.classList.add('live');
+    ws.onclose = () => { dot.classList.remove('live'); setTimeout(connectWS, 1500); };
+    ws.onmessage = (ev) => {
+      try {
+        const m = JSON.parse(ev.data);
+        if (m.type === 'tally') setTally(m.trackId, m.tally, true);
+      } catch (e) {}
+    };
+  }
+
+  function switchGym() {
+    const next = gymInput.value.trim();
+    if (!next || next === gym) return;
+    gym = next;
+    seed();
+    render();
+    loadInitial();
+    connectWS();
+  }
+  gymInput.addEventListener('change', switchGym);
+
+  function addTrack() {
+    const input = document.getElementById('newtrack');
+    const name = input.value.trim();
+    if (!name) return;
+    const id = 't-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 5);
+    tracks.set(id, { title: name, tally: 0 });
+    input.value = '';
+    render();
+  }
+  document.getElementById('addbtn').addEventListener('click', addTrack);
+  document.getElementById('newtrack').addEventListener('keydown', e => { if (e.key === 'Enter') addTrack(); });
+
+  // boot
+  seed();
+  render();
+  loadInitial();
+  connectWS();
+</script>
+</body>
+</html>

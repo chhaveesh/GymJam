@@ -1,0 +1,38 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        working-directory: server
+        run: npm install
+
+      - name: Start API
+        working-directory: server
+        env:
+          REDIS_URL: redis://localhost:6379
+          MONGO_URL: mongodb://localhost:27017
+        run: |
+          node src/index.js &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/healthz && break; sleep 1; done
+
+      - name: Concurrency / idempotency invariants
+        working-directory: server
+        run: node test/concurrency.js
