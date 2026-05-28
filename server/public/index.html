@@ -9,33 +9,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #0a0a0b;
-    --panel: #141417;
-    --line: #26262b;
-    --text: #f4f4f2;
-    --dim: #85858d;
+    --bg: #0a0a0b; --panel: #141417; --line: #26262b;
+    --text: #f4f4f2; --dim: #85858d;
     --accent: #c6ff3a;   /* acid lime */
     --down: #ff5470;     /* coral */
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0;
-    min-height: 100vh;
+    margin: 0; min-height: 100vh;
     background:
       radial-gradient(900px 500px at 80% -10%, rgba(198,255,58,.10), transparent 60%),
       radial-gradient(700px 500px at -10% 110%, rgba(255,84,112,.08), transparent 55%),
       var(--bg);
-    color: var(--text);
-    font-family: "Archivo", system-ui, sans-serif;
+    color: var(--text); font-family: "Archivo", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 620px; margin: 0 auto; padding: 40px 20px 80px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 36px 20px 80px; }
 
   header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .mark {
-    font-family: "Bebas Neue", sans-serif;
-    font-size: 46px; letter-spacing: 2px; line-height: .9;
-  }
+  .mark { font-family: "Bebas Neue", sans-serif; font-size: 46px; letter-spacing: 2px; line-height: .9; }
   .mark b { color: var(--accent); }
   .sub { color: var(--dim); font-size: 13px; font-weight: 500; }
 
@@ -49,49 +41,84 @@
     flex: 1; background: transparent; border: 0; color: var(--text);
     font-family: "IBM Plex Mono", monospace; font-size: 14px; outline: none;
   }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--down); box-shadow: 0 0 0 0 rgba(198,255,58,.5); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--down); }
   .dot.live { background: var(--accent); animation: pulse 2s infinite; }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(198,255,58,.45)} 70%{box-shadow:0 0 0 8px rgba(198,255,58,0)} 100%{box-shadow:0 0 0 0 rgba(198,255,58,0)} }
 
-  .hint { color: var(--dim); font-size: 12.5px; margin: 4px 2px 22px; }
+  /* --- NOW PLAYING --- */
+  .now {
+    margin: 18px 0 8px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+  }
+  .stage { position: relative; aspect-ratio: 16/9; background: #000; }
+  .stage iframe, .stage img { width: 100%; height: 100%; border: 0; display: block; object-fit: cover; }
+  .stage .empty { display:flex; align-items:center; justify-content:center; height:100%; color:var(--dim);
+    font-family:"IBM Plex Mono",monospace; font-size:13px; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px;
+    align-items: center; justify-content: center; background: rgba(8,8,9,.72); backdrop-filter: blur(3px);
+    cursor: pointer; text-align: center; padding: 20px;
+  }
+  .overlay .big { font-family:"Bebas Neue",sans-serif; font-size: 34px; letter-spacing: 2px; }
+  .overlay .big::before { content:"▶ "; color: var(--accent); }
+  .overlay small { color: var(--dim); font-size: 12px; max-width: 320px; }
+  .nowmeta { display:flex; align-items:center; gap:12px; padding: 12px 16px; }
+  .onair {
+    font-family:"IBM Plex Mono",monospace; font-size: 10px; letter-spacing:.18em; color:#0a0a0b;
+    background: var(--accent); padding: 3px 7px; border-radius: 5px; font-weight:600;
+  }
+  .nowmeta .t { font-family:"Bebas Neue",sans-serif; font-size: 24px; letter-spacing:1px; line-height:1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nowmeta .by { color: var(--dim); font-size: 11px; font-family:"IBM Plex Mono",monospace; margin-top:3px; }
+
+  .hint { color: var(--dim); font-size: 12.5px; margin: 14px 2px 12px; }
   .hint b { color: var(--text); font-weight: 700; }
+  .section { font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color: var(--dim); margin: 18px 2px 10px; }
 
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .card {
-    display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 14px;
-    padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px;
+    display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 14px;
+    padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px;
     background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-    will-change: transform;
-    animation: rise .45s both;
+    animation: rise .4s both;
   }
   @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-  .card.flash { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(198,255,58,.12); }
-  .rank { font-family: "IBM Plex Mono", monospace; color: var(--dim); font-size: 14px; text-align: center; }
-  .title { font-family: "Bebas Neue", sans-serif; font-size: 25px; letter-spacing: 1px; line-height: 1; }
-  .meta { color: var(--dim); font-size: 11.5px; font-family: "IBM Plex Mono", monospace; margin-top: 3px; }
-
-  .vote { display: flex; align-items: center; gap: 10px; }
-  .tally { font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 600; min-width: 44px; text-align: right; }
+  .rank { font-family:"IBM Plex Mono",monospace; color: var(--dim); font-size: 14px; text-align:center; }
+  .title { font-family:"Bebas Neue",sans-serif; font-size: 23px; letter-spacing:1px; line-height:1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 38vw; }
+  .meta { color: var(--dim); font-size: 11px; font-family:"IBM Plex Mono",monospace; margin-top:3px; }
+  .vote { display:flex; align-items:center; gap:10px; }
+  .tally { font-family:"IBM Plex Mono",monospace; font-size: 20px; font-weight:600; min-width:40px; text-align:right; }
   button.v {
-    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    width: 36px; height: 36px; border-radius: 10px; cursor: pointer;
     border: 1px solid var(--line); background: rgba(255,255,255,.03); color: var(--text);
-    font-size: 18px; line-height: 1; transition: transform .08s, background .15s, border-color .15s;
+    font-size: 17px; line-height: 1; transition: transform .08s, background .15s, border-color .15s;
   }
   button.v:active { transform: scale(.9); }
   button.v.up.active { border-color: var(--accent); color: var(--accent); background: rgba(198,255,58,.12); }
   button.v.down.active { border-color: var(--down); color: var(--down); background: rgba(255,84,112,.12); }
 
-  .add { display: flex; gap: 8px; margin-top: 18px; }
+  .add { display:flex; gap:8px; margin-top: 6px; position: relative; }
   .add input {
-    flex: 1; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
-    background: rgba(255,255,255,.02); color: var(--text); font-family: "Archivo"; font-size: 14px; outline: none;
+    flex:1; padding: 12px 14px; border-radius: 11px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.02); color: var(--text); font-family:"Archivo"; font-size: 14px; outline:none;
   }
   .add input:focus { border-color: var(--accent); }
   .add button {
-    padding: 0 18px; border-radius: 11px; cursor: pointer; border: 0;
-    background: var(--accent); color: #0a0a0b; font-weight: 700; font-family: "Archivo"; letter-spacing: .02em;
+    padding: 0 18px; border-radius: 11px; cursor:pointer; border:0;
+    background: var(--accent); color:#0a0a0b; font-weight:700; font-family:"Archivo"; letter-spacing:.02em;
   }
-  footer { margin-top: 34px; color: var(--dim); font-size: 11.5px; font-family: "IBM Plex Mono", monospace; }
+  .results { display:none; margin-top:8px; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .results.open { display:block; }
+  .results .r { display:flex; gap:10px; align-items:center; padding:8px 10px; cursor:pointer; }
+  .results .r:hover { background: rgba(198,255,58,.07); }
+  .results .r img { width:54px; height:40px; object-fit:cover; border-radius:6px; }
+  .results .r .rt { font-size:13px; line-height:1.25; }
+  .results .r .rc { color:var(--dim); font-size:11px; font-family:"IBM Plex Mono",monospace; }
+  .err { color: var(--down); font-size:12px; font-family:"IBM Plex Mono",monospace; margin: 8px 2px 0; min-height: 14px; }
+
+  footer { margin-top: 30px; color: var(--dim); font-size: 11.5px; font-family:"IBM Plex Mono",monospace; }
   footer span { color: var(--accent); }
 </style>
 </head>
@@ -99,182 +126,246 @@
   <div class="wrap">
     <header>
       <div class="mark">GYM<b>JAM</b></div>
-      <div class="sub">the room picks the queue</div>
+      <div class="sub">the room picks the queue · the top track plays</div>
     </header>
 
     <div class="bar">
       <label for="gym">gym</label>
-      <input id="gym" value="demo-gym" spellcheck="false" />
+      <input id="gym" spellcheck="false" />
       <span id="dot" class="dot" title="connection"></span>
     </div>
-    <div class="hint">Open this page in a <b>second tab</b> and vote — watch tallies update live across both. Highest tally floats to the top.</div>
 
-    <ul id="list"></ul>
+    <!-- NOW PLAYING -->
+    <div class="now">
+      <div class="stage" id="stage">
+        <div class="empty" id="stageEmpty">No track playing — add one below.</div>
+        <div id="player"></div>
+        <div class="overlay" id="overlay" style="display:none">
+          <div class="big">Play on this screen</div>
+          <small>Tap to make this device the floor speaker. It’ll auto-play the top-voted track and roll to the next when each song ends.</small>
+        </div>
+      </div>
+      <div class="nowmeta" id="nowmeta" style="display:none">
+        <span class="onair">ON AIR</span>
+        <div style="min-width:0">
+          <div class="t" id="nowTitle">—</div>
+          <div class="by" id="nowBy"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">Anyone with a YouTube link can add a song. Highest tally floats to the top and plays next. <b id="floorState">No screen is playing yet.</b></div>
 
     <div class="add">
-      <input id="newtrack" placeholder="Add a track…" maxlength="40" />
+      <input id="newtrack" placeholder="Paste a YouTube link…" />
       <button id="addbtn">Add</button>
     </div>
+    <div class="results" id="results"></div>
+    <div class="err" id="err"></div>
+
+    <div class="section">Up next — ranked by votes</div>
+    <ul id="list"></ul>
 
     <footer>member <span id="me"></span> · realtime via redis pub/sub → websocket</footer>
   </div>
 
 <script>
-  const list = document.getElementById('list');
-  const gymInput = document.getElementById('gym');
-  const dot = document.getElementById('dot');
-  const memberId = 'm-' + Math.random().toString(36).slice(2, 8);
-  document.getElementById('me').textContent = memberId;
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const GYM = params.get("gym") || "demo-gym";
+  $("gym").value = GYM;
 
-  const tracks = new Map();        // id -> { title, tally }
-  const myVote = new Map();        // id -> 'up' | 'down'
-  let gym = gymInput.value.trim();
-  let ws;
+  // Stable per-device identity + per-track local vote memory (for toggle UX).
+  const memberId = (() => {
+    let m = localStorage.getItem("gymjam_member");
+    if (!m) { m = "m_" + (crypto.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem("gymjam_member", m); }
+    return m;
+  })();
+  $("me").textContent = memberId.slice(0, 10);
+  const myVotes = {}; // trackId -> "up" | "down"
 
-  const apiBase = (id, p = '') =>
-    `/api/gyms/${encodeURIComponent(gym)}/tracks/${encodeURIComponent(id)}${p}`;
+  let state = { nowPlaying: null, queue: [] };
+  let searchEnabled = false;
 
-  function seed() {
-    tracks.clear(); myVote.clear();
-    [
-      ['t-warmup',   'Warmup Pulse'],
-      ['t-heavy',    'Heavy Sets'],
-      ['t-sprint',   'Sprint Interval'],
-      ['t-cooldown', 'Cooldown Flow'],
-    ].forEach(([id, title]) => tracks.set(id, { title, tally: 0 }));
+  // ---- API ----
+  const api = (path, opts) => fetch(path, opts).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    return d;
+  });
+  const addTrack = (input) => api(`/api/gyms/${GYM}/tracks`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: input, addedBy: memberId.slice(0, 10) }),
+  });
+  const vote = (trackId, direction) => api(`/api/gyms/${GYM}/tracks/${trackId}/vote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID?.() || String(Math.random()) },
+    body: JSON.stringify({ memberId, direction }),
+  });
+  const advance = (finishedId) => api(`/api/gyms/${GYM}/advance`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ finishedId }),
+  });
+
+  // ---- YouTube IFrame player (only on the screen that "takes the floor") ----
+  let player = null, ytReady = false, isPlayer = false, loadedId = null, wantFloor = false;
+
+  window.onYouTubeIframeAPIReady = () => { ytReady = true; if (wantFloor) createPlayer(); };
+  (function loadYT(){ const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; document.head.appendChild(s); })();
+
+  function takeFloor() {
+    isPlayer = true; wantFloor = true;
+    $("overlay").style.display = "none";
+    $("floorState").textContent = "Playing on this screen.";
+    if (ytReady) createPlayer(); // else created in onYouTubeIframeAPIReady
   }
+  $("overlay").addEventListener("click", takeFloor);
 
-  function cardEl(id, t, i) {
-    const li = document.createElement('li');
-    li.className = 'card';
-    li.dataset.id = id;
-    li.style.animationDelay = (i * 45) + 'ms';
-    li.innerHTML = `
-      <div class="rank">${String(i + 1).padStart(2, '0')}</div>
-      <div>
-        <div class="title"></div>
-        <div class="meta">${id}</div>
-      </div>
-      <div class="vote">
-        <button class="v down" title="downvote">▼</button>
-        <span class="tally">${t.tally}</span>
-        <button class="v up" title="upvote">▲</button>
-      </div>`;
-    li.querySelector('.title').textContent = t.title;
-    const up = li.querySelector('.up'), down = li.querySelector('.down');
-    if (myVote.get(id) === 'up') up.classList.add('active');
-    if (myVote.get(id) === 'down') down.classList.add('active');
-    up.addEventListener('click', () => castVote(id, 'up'));
-    down.addEventListener('click', () => castVote(id, 'down'));
-    return li;
-  }
-
-  function render() {
-    // FLIP: capture positions, re-render sorted, animate the delta.
-    const prev = new Map();
-    list.querySelectorAll('[data-id]').forEach(el => prev.set(el.dataset.id, el.getBoundingClientRect().top));
-
-    const sorted = [...tracks.entries()].sort(
-      (a, b) => b[1].tally - a[1].tally || a[1].title.localeCompare(b[1].title)
-    );
-    list.innerHTML = '';
-    sorted.forEach(([id, t], i) => list.appendChild(cardEl(id, t, i)));
-
-    list.querySelectorAll('[data-id]').forEach(el => {
-      const old = prev.get(el.dataset.id);
-      if (old == null) return;
-      const delta = old - el.getBoundingClientRect().top;
-      if (!delta) return;
-      el.style.transition = 'transform 0s';
-      el.style.transform = `translateY(${delta}px)`;
-      requestAnimationFrame(() => {
-        el.style.transition = 'transform .35s cubic-bezier(.2,.7,.2,1)';
-        el.style.transform = '';
-      });
+  function createPlayer() {
+    if (player) { syncPlayer(); return; }
+    player = new YT.Player("player", {
+      width: "100%", height: "100%",
+      playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1 },
+      events: {
+        onReady: syncPlayer,
+        onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) onEnded(); },
+        onError: () => onEnded(), // unplayable/region-blocked: skip to next
+      },
     });
   }
 
-  function setTally(id, tally, flash) {
-    const t = tracks.get(id);
-    if (!t) return;
-    const changed = t.tally !== tally;
-    t.tally = tally;
-    render();
-    if (flash && changed) {
-      const el = list.querySelector(`[data-id="${CSS.escape(id)}"]`);
-      if (el) { el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 600); }
-    }
+  // Load whatever the server says is now-playing (post-gesture, so autoplay is allowed).
+  function syncPlayer() {
+    if (!isPlayer || !player || !state.nowPlaying) return;
+    const id = state.nowPlaying.videoId;
+    if (id && id !== loadedId) { loadedId = id; player.loadVideoById(id); }
   }
 
-  async function castVote(id, dir) {
-    myVote.set(id, dir);
-    render();
+  async function onEnded() {
+    const finished = loadedId;
+    loadedId = null;
+    try { state = await advance(finished); } catch {}
+    render(); syncPlayer();
+  }
+
+  // ---- Render ----
+  function render() {
+    const np = state.nowPlaying;
+    $("stageEmpty").style.display = np ? "none" : "flex";
+    $("nowmeta").style.display = np ? "flex" : "none";
+
+    if (np) {
+      $("nowTitle").textContent = np.title;
+      $("nowBy").textContent = "added by " + (np.addedBy || "anon");
+      // This screen is the floor → show the live player; otherwise show a thumbnail.
+      if (isPlayer) {
+        $("overlay").style.display = "none";
+        $("player").style.display = "block";
+        const tn = $("stage").querySelector("img.thumb"); if (tn) tn.remove();
+      } else {
+        $("overlay").style.display = "flex";
+        $("player").style.display = "none";
+        let tn = $("stage").querySelector("img.thumb");
+        if (!tn) { tn = document.createElement("img"); tn.className = "thumb"; $("stage").insertBefore(tn, $("overlay")); }
+        tn.src = `https://i.ytimg.com/vi/${np.videoId}/hqdefault.jpg`;
+      }
+    } else if (!isPlayer) {
+      $("overlay").style.display = "none";
+    }
+
+    // Up-next list = the queue minus the track that's currently on air.
+    const upNext = state.queue.filter((t) => !np || t.trackId !== np.trackId);
+    const list = $("list");
+    list.innerHTML = "";
+    if (!upNext.length) {
+      const li = document.createElement("li");
+      li.className = "meta"; li.style.padding = "6px 2px";
+      li.textContent = np ? "Nothing queued yet — add the next banger." : "";
+      list.appendChild(li);
+    }
+    upNext.forEach((t, i) => {
+      const li = document.createElement("li"); li.className = "card";
+      const mine = myVotes[t.trackId];
+      li.innerHTML = `
+        <div class="rank">${i + 1}</div>
+        <div style="min-width:0">
+          <div class="title">${esc(t.title)}</div>
+          <div class="meta">by ${esc(t.addedBy || "anon")}</div>
+        </div>
+        <div class="vote">
+          <button class="v up ${mine==="up"?"active":""}" data-dir="up">▲</button>
+          <span class="tally">${t.tally}</span>
+          <button class="v down ${mine==="down"?"active":""}" data-dir="down">▼</button>
+        </div>`;
+      li.querySelectorAll("button.v").forEach((b) =>
+        b.addEventListener("click", () => onVote(t.trackId, b.dataset.dir)));
+      list.appendChild(li);
+    });
+  }
+
+  async function onVote(trackId, dir) {
+    // Tapping your current vote again clears it (toggle).
+    const direction = myVotes[trackId] === dir ? "clear" : dir;
+    myVotes[trackId] = direction === "clear" ? undefined : direction;
+    render(); // optimistic highlight; server broadcast confirms the tally
+    try { await vote(trackId, direction); } catch (e) { showErr(e.message); }
+  }
+
+  // ---- Add a song (paste link always; type-to-search if enabled) ----
+  $("addbtn").addEventListener("click", onAdd);
+  $("newtrack").addEventListener("keydown", (e) => { if (e.key === "Enter") onAdd(); });
+  async function onAdd() {
+    const val = $("newtrack").value.trim();
+    if (!val) return;
+    showErr("");
+    const looksLikeLink = /youtu\.?be|^[a-zA-Z0-9_-]{11}$/.test(val);
+    if (!looksLikeLink && searchEnabled) return doSearch(val);
+    try { state = await addTrack(val); $("newtrack").value = ""; closeResults(); render(); syncPlayer(); }
+    catch (e) { showErr(e.message); }
+  }
+  async function doSearch(q) {
     try {
-      const r = await fetch(apiBase(id, '/vote'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ memberId, direction: dir }),
+      const { results } = await api(`/api/youtube/search?q=${encodeURIComponent(q)}`);
+      const box = $("results"); box.innerHTML = "";
+      results.forEach((r) => {
+        const row = document.createElement("div"); row.className = "r";
+        row.innerHTML = `<img src="${r.thumb}"><div><div class="rt">${esc(r.title)}</div><div class="rc">${esc(r.channel)}</div></div>`;
+        row.addEventListener("click", async () => {
+          try { state = await addTrack(r.videoId); $("newtrack").value=""; closeResults(); render(); syncPlayer(); }
+          catch (e) { showErr(e.message); }
+        });
+        box.appendChild(row);
       });
-      const d = await r.json();
-      if (typeof d.tally === 'number') setTally(id, d.tally, true); // WS will echo to other tabs
-    } catch (e) {
-      console.error('vote failed', e);
-    }
+      box.classList.add("open");
+    } catch (e) { showErr(e.message); }
   }
+  function closeResults(){ $("results").classList.remove("open"); $("results").innerHTML=""; }
+  function showErr(m){ $("err").textContent = m || ""; }
+  function esc(s){ return String(s).replace(/[&<>"]/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
-  async function loadInitial() {
-    await Promise.all([...tracks.keys()].map(async id => {
-      try {
-        const r = await fetch(apiBase(id, '/tally'));
-        const d = await r.json();
-        if (typeof d.tally === 'number') tracks.get(id).tally = d.tally;
-      } catch (e) { /* server not up yet */ }
-    }));
-    render();
-  }
-
-  function connectWS() {
-    if (ws) { try { ws.close(); } catch (e) {} }
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}?gym=${encodeURIComponent(gym)}`);
-    ws.onopen = () => dot.classList.add('live');
-    ws.onclose = () => { dot.classList.remove('live'); setTimeout(connectWS, 1500); };
+  // ---- WebSocket: live state for the whole room ----
+  let ws, backoff = 500;
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${proto}://${location.host}/?gym=${encodeURIComponent(GYM)}`);
+    ws.onopen = () => { backoff = 500; $("dot").classList.add("live"); };
+    ws.onclose = () => { $("dot").classList.remove("live"); setTimeout(connect, backoff); backoff = Math.min(backoff*2, 8000); };
     ws.onmessage = (ev) => {
-      try {
-        const m = JSON.parse(ev.data);
-        if (m.type === 'tally') setTally(m.trackId, m.tally, true);
-      } catch (e) {}
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "state") { state = { nowPlaying: msg.nowPlaying, queue: msg.queue }; render(); syncPlayer(); }
     };
   }
 
-  function switchGym() {
-    const next = gymInput.value.trim();
-    if (!next || next === gym) return;
-    gym = next;
-    seed();
+  // ---- Boot ----
+  (async () => {
+    try { searchEnabled = (await api("/api/config")).searchEnabled; } catch {}
+    if (searchEnabled) $("newtrack").placeholder = "Paste a YouTube link, or search…";
+    try { state = await api(`/api/gyms/${GYM}/state`); } catch {}
     render();
-    loadInitial();
-    connectWS();
-  }
-  gymInput.addEventListener('change', switchGym);
-
-  function addTrack() {
-    const input = document.getElementById('newtrack');
-    const name = input.value.trim();
-    if (!name) return;
-    const id = 't-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 5);
-    tracks.set(id, { title: name, tally: 0 });
-    input.value = '';
-    render();
-  }
-  document.getElementById('addbtn').addEventListener('click', addTrack);
-  document.getElementById('newtrack').addEventListener('keydown', e => { if (e.key === 'Enter') addTrack(); });
-
-  // boot
-  seed();
-  render();
-  loadInitial();
-  connectWS();
+    connect();
+  })();
+})();
 </script>
 </body>
 </html>

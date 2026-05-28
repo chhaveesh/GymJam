@@ -3,14 +3,18 @@
 -- Redis runs each script single-threaded and atomically, so the read-modify-write
 -- on the tally CANNOT interleave with another vote. This is how we get
 -- "race-condition handling on concurrent updates" for free: no locks, no CAS retries.
+-- The per-gym ranked queue (a sorted set) is updated in the SAME script, so the
+-- ordering the floor plays from is just as race-free as the tally itself.
 --
 -- KEYS[1] = tally key            "gym:{g}:track:{t}:tally"   (int = upvotes - downvotes)
 -- KEYS[2] = member-vote key      "gym:{g}:track:{t}:m:{mem}" ("up" | "down" | absent)
 -- KEYS[3] = idempotency key      "idem:{client-supplied-uuid}"
 -- KEYS[4] = dirty set key        "dirty:tallies"
+-- KEYS[5] = queue key            "gym:{g}:queue"             (zset: member=trackId, score=tally)
 -- ARGV[1] = direction            "up" | "down" | "clear"
 -- ARGV[2] = idempotency TTL seconds
 -- ARGV[3] = dirty member         "{g}:{t}"  (added to the flush set)
+-- ARGV[4] = queue member         "{t}"      (the trackId, scored in the queue)
 --
 -- Returns: { newTally, deduped }   deduped = 1 if this exact request was already applied
 
@@ -38,7 +42,8 @@ elseif dir == "clear" then
   redis.call("DEL", KEYS[2])
 end
 
--- 4. One atomic increment + mark dirty for the async Mongo flush.
+-- 4. One atomic increment, reflect it in the ranked queue, and mark dirty for flush.
 local tally = redis.call("INCRBY", KEYS[1], delta)
+redis.call("ZADD", KEYS[5], tally, ARGV[4])
 redis.call("SADD", KEYS[4], ARGV[3])
 return { tally, 0 }

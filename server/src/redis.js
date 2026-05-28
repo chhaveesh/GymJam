@@ -13,8 +13,9 @@ export const subscriber = new Redis(REDIS_URL);
 
 // Register the Lua script as a custom command. ioredis SCRIPT LOADs it once and
 // uses EVALSHA after that, so the script body isn't shipped on every call.
+// numberOfKeys is now 5: tally, member, idem, dirty, queue.
 redis.defineCommand("castVote", {
-  numberOfKeys: 4,
+  numberOfKeys: 5,
   lua: readFileSync(join(__dirname, "vote.lua"), "utf8"),
 });
 
@@ -24,4 +25,8 @@ export const keys = {
   idem:   (id)        => `idem:${id}`,
   dirty:  ()          => `dirty:tallies`,
   channel:(g)         => `gym:${g}`,
+  // --- jukebox additions ---
+  queue:  (g)         => `gym:${g}:queue`,   // zset: member=trackId, score=tally
+  meta:   (g)         => `gym:${g}:meta`,    // hash: field=trackId -> JSON {videoId,title,addedBy,addedAt}
+  now:    (g)         => `gym:${g}:now`,     // string: trackId currently playing on the floor
 };

@@ -60,6 +60,28 @@ flowchart LR
   API -->|pub/sub fan-out| WS[WebSocket clients]
 ```
 
+## Playback (YouTube)
+
+The top-voted track auto-plays on a designated **floor screen**. Open the app, hit
+**Play on this screen**, and that device becomes the speaker: it plays the #1 track
+and, when each song ends, drops it and rolls to the next highest-voted one. Phones
+in the room just vote and add — they show what's on air without blasting audio.
+
+- **Anyone can add a song** by pasting a YouTube link (full URL, `youtu.be`, or
+  `/shorts`). The title is resolved server-side via YouTube oEmbed — no API key.
+- **Type-to-search** is optional: set `YOUTUBE_API_KEY` (Data API v3) to let members
+  search instead of paste. `GET /api/config` tells the UI which mode is on.
+- The ranked queue is kept in a Redis sorted set updated **inside the same atomic
+  Lua script** as the tally, so the order the floor plays from is as race-free as
+  the counts. Proof: `node server/test/jukebox.mjs`.
+
+```
+GET  /api/gyms/:gym/state            # now-playing + queue ranked by votes
+POST /api/gyms/:gym/tracks           # { url | videoId } — add a song
+POST /api/gyms/:gym/advance          # { finishedId } — floor reports song ended
+GET  /api/youtube/search?q=          # optional, needs YOUTUBE_API_KEY
+```
+
 ## Deploy to AWS
 
 See [`infra/terraform/README.md`](./infra/terraform/README.md) for the
@@ -92,7 +114,7 @@ GymJam/
 For a cheap portfolio bring-up, Redis and Mongo run as sidecar containers in the
 Fargate task and the stack uses the default VPC's public subnets. Production swaps
 the sidecars for ElastiCache + MongoDB Atlas (same env vars) and moves tasks into
-private subnets behind NAT. Spotify and the ML re-ranker are roadmap, not built here.
+private subnets behind NAT. The ML re-ranker is roadmap. Playback is built here via YouTube (see below).
 
 ## License
 
